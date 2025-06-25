@@ -6,6 +6,8 @@ from torch.utils.data import Dataset, DataLoader
 import pdb
 
 
+# 包含状态、动作、奖励等强化学习所需的基本元素
+# 主要功能：存储转移信息(store_transition)，随机采样批次数据(sample)
 
 class ReplayBuffer(object):
     def __init__(self, args, state_dim, state_dim_2, action_dim):
@@ -70,18 +72,18 @@ class ReplayBuffer_High(object):
         self.count = 0
         self.buffer = {"state": np.zeros((self.buffer_capacity, state_dim)),
                         "state_trend": np.zeros((self.buffer_capacity, state_dim_2)),
-                        "state_clf": np.zeros((self.buffer_capacity, 2)),
+                        "state_clf": np.zeros((self.buffer_capacity, 2)), # 分类状态
                         "previous_action": np.zeros((self.buffer_capacity)),
                         "demo_action": np.zeros((self.buffer_capacity, action_dim)),
                         "action": np.zeros((self.buffer_capacity, 1)),
                         "reward": np.zeros(self.buffer_capacity),
                         "next_state": np.zeros((self.buffer_capacity, state_dim)),
                         "next_state_trend": np.zeros((self.buffer_capacity, state_dim_2)),
-                        "next_state_clf": np.zeros((self.buffer_capacity, 2)),
+                        "next_state_clf": np.zeros((self.buffer_capacity, 2)),  # 下一分类状态
                         "next_previous_action": np.zeros((self.buffer_capacity)),
                         "next_demo_action": np.zeros((self.buffer_capacity, action_dim)),
                         "terminal": np.zeros(self.buffer_capacity),
-                        "q_memory": np.zeros(self.buffer_capacity),
+                        "q_memory": np.zeros(self.buffer_capacity),  # Q值记忆
                        }
 
     def store_transition(self, state, state_trend, state_clf, previous_action, demo_action, action, reward, 
