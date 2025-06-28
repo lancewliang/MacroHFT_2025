@@ -19,6 +19,10 @@ class ReplayBuffer(object):
         torch.manual_seed(self.seed)
         self.current_size = 0
         self.count = 0
+        if torch.cuda.is_available():
+            self.device = torch.device(args.device)
+        else:
+            self.device = torch.device("cpu")
         self.buffer = {"state": np.zeros((self.buffer_capacity, state_dim)),
                         "state_trend": np.zeros((self.buffer_capacity, state_dim_2)),
                         "previous_action": np.zeros((self.buffer_capacity)),
@@ -41,8 +45,7 @@ class ReplayBuffer(object):
         self.buffer["reward"][self.count] = reward
         self.buffer["next_state"][self.count] = next_state
         self.buffer["next_state_trend"][self.count] = next_state_trend
-        self.buffer["next_previous_action"][
-            self.count] = next_previous_action
+        self.buffer["next_previous_action"][self.count] = next_previous_action
         self.buffer["next_demo_action"][self.count] = next_demo_action
         self.buffer["terminal"][self.count] = terminal
         self.count = (self.count + 1) % self.buffer_capacity  # When the 'count' reaches buffer_capacity, it will be reset to 0.

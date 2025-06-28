@@ -50,18 +50,18 @@
 # lr=1e-4           # 学习率
 # 该实现结合了深度强化学习与高频交易场景，通过双网络架构(DQN)和经验回放机制来学习最优交易策略，
 # 使用KL散度作为正则化项(可通过α参数控制)。训练过程中通过TensorBoard记录关键指标，并保存最佳模型用于实际交易。
-
+import time  # Import the time module
 import pathlib
 import sys
 import random
 import argparse
-import np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import yaml
 import pickle
 import os
+import logging as log
 from torch.utils.tensorboard import SummaryWriter
 import warnings
 warnings.filterwarnings("ignore")
@@ -81,19 +81,19 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=5000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
-parser.add_argument("--q_value_memorize_freq",type=int, default=10)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
+parser.add_argument("--q_value_memorize_freq",type=int, default=50)  # Q值记忆频率 / Q-value logging frequency
+parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=100)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
+parser.add_argument("--lr", type=float, default=2e-4)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.5)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.1)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
 parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=2.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=4.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
@@ -121,21 +121,26 @@ def calculate_alpha(diff, k):
 
 class DQN(object):
     def __init__(self, args):  # 定义DQN的一系列属性
+        log.info('==slope==')
         self.seed = args.seed
         seed_torch(self.seed)
         if torch.cuda.is_available():
             self.device = torch.device(args.device)
         else:
             self.device = torch.device("cpu")
+        log.info(self.device)
         self.result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), '{}'.format(args.clf), str(int(args.alpha)), args.label)
         self.label = int(args.label.split('_')[1])
         self.model_path = os.path.join(self.result_path, "seed_{}".format(self.seed))
         self.train_data_path = os.path.join(ROOT, "MacroHFT", "data", args.dataset, "train")
+        log.info(f'train_data_path:{self.train_data_path}')
         self.val_data_path = os.path.join(ROOT, "MacroHFT", "data", args.dataset, "val")
         self.test_data_path = os.path.join(ROOT, "MacroHFT", "data", args.dataset, "test")
         if args.clf == 'slope':
+            log.info('==slope==')
             with open(os.path.join(self.train_data_path, 'slope_labels.pkl'), 'rb') as file:
                 self.train_index = pickle.load(file)
+                log.info(f"self.train_index:{self.train_index}")
             with open(os.path.join(self.val_data_path, 'slope_labels.pkl'), 'rb') as file:
                 self.val_index = pickle.load(file)
             with open(os.path.join(self.test_data_path, 'slope_labels.pkl'), 'rb') as file:
@@ -181,7 +186,7 @@ class DQN(object):
         self.n_action = 2
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
-        self.eval_net = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.device),
+        self.eval_net = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.device)
         self.target_net =subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.device)
         self.hardupdate()
         self.update_times = args.update_times
@@ -198,7 +203,7 @@ class DQN(object):
         self.decay_length = args.decay_length
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
-
+        
     def update(self, replay_buffer):
         """
         更新评估网络参数，包含TD误差和KL散度的联合优化
@@ -229,6 +234,7 @@ class DQN(object):
                   q_current_mean (float): 当前Q值均值
                   q_target_mean (float): 目标Q值均值
         """
+        # start_time = time.time()  # Start timing            
         self.eval_net.train()
         batch, _, _ = replay_buffer.sample()
         batch = {k: v.to(self.device) for k, v in batch.items()}
@@ -266,9 +272,15 @@ class DQN(object):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
         self.update_counter += 1
-        self.eval_net.eval()
+        self.eval_net.eval() 
+        
+        # end_time = time.time()  # End timing
+        # duration = end_time - start_time
+        # log.info(f"end training with df update {end_time}  {duration:.4f} seconds" )
+        
+        
         # 返回损失值供记录 / Return loss values for logging
-        return td_error.cpu(), KL_loss.cpu(), torch.mean(q_current.cpu()), torch.mean(q_target.cpu())
+        return td_error, KL_loss, torch.mean(q_current), torch.mean(q_target)
 
     def hardupdate(self):
         self.target_net.load_state_dict(self.eval_net.state_dict())
@@ -334,7 +346,9 @@ class DQN(object):
         action = action[0]
         return action
 
-    def _train_data_file(self, 
+    def _train_data_file(self,
+                        df_dataset, 
+                        i,
                         episode_counter, 
                         step_counter, 
                         df_index, 
@@ -370,9 +384,13 @@ class DQN(object):
         Returns:
             tuple: 更新后的episode计数器和step计数器
         """
-        print("training with df", df_index)
-        # 加载数据文件 / Load data file
-        self.df = pd.read_feather(os.path.join(self.train_data_path, "df_{}.feather".format(df_index)))
+                # 加载数据文件 / Load data file
+        # self.df = pd.read_feather(os.path.join(self.train_data_path, "df_{}.feather".format(df_index)))
+        self.df = df_dataset
+        start_time = time.time()  # Start timing       
+        data_file_size = len(self.df)          
+        log.info(f"training with df {df_index} {data_file_size} {start_time}" )
+
         # 设置评估网络为验证模式 / Set evaluation network to validation mode
         self.eval_net.eval()
                         
@@ -415,10 +433,10 @@ class DQN(object):
                     
                     # 定期记录日志 / Periodically log metrics
                     if self.update_counter % self.q_value_memorize_freq == 1:
-                        self.writer.add_scalar(tag="td_error", scalar_value=td_error, global_step=self.update_counter, walltime=None)
-                        self.writer.add_scalar(tag="KL_loss", scalar_value=KL_loss, global_step=self.update_counter, walltime=None)
-                        self.writer.add_scalar(tag="q_eval", scalar_value=q_eval, global_step=self.update_counter, walltime=None)
-                        self.writer.add_scalar(tag="q_target", scalar_value=q_target, global_step=self.update_counter, walltime=None)
+                        self.writer.add_scalar(tag="td_error", scalar_value=td_error.cpu(), global_step=self.update_counter, walltime=None)
+                        self.writer.add_scalar(tag="KL_loss", scalar_value=KL_loss.cpu(), global_step=self.update_counter, walltime=None)
+                        self.writer.add_scalar(tag="q_eval", scalar_value=q_eval.cpu(), global_step=self.update_counter, walltime=None)
+                        self.writer.add_scalar(tag="q_target", scalar_value=q_target.cpu(), global_step=self.update_counter, walltime=None)
             # 判断回合结束 / Check if episode is done
             if done:
                 break
@@ -436,6 +454,11 @@ class DQN(object):
         epoch_final_balance_train_list.append(final_balance)
         epoch_required_money_train_list.append(required_money)
         epoch_reward_sum_train_list.append(episode_reward_sum)
+         
+        end_time = time.time()  # End timing
+        duration = end_time - start_time
+        log.info(f"end training with df {df_index} {end_time}  {duration:.2f} seconds" )
+        
         return episode_counter, step_counter
     
     
@@ -519,7 +542,7 @@ class DQN(object):
             epoch_final_balance_train_list = []
             epoch_required_money_train_list = []
             epoch_reward_sum_train_list = []
-            print('epoch ', epoch_counter + 1)
+            log.info(f'epoch {epoch_counter + 1}')
             
             # 复制并打乱数据索引 / Copy and shuffle data indexes
             random_list = self.train_index[self.label]
@@ -527,17 +550,27 @@ class DQN(object):
             
             # 生成随机初始持仓 / Generate random initial positions
             random_position_list = random.choices(range(self.n_action), k=df_number)
-            print(random_list)
+            log.info(f"random_list:{random_list}")
             
+            df_datasets_dict = {}
+            for i in range(df_number):
+                df_index = random_list[i]
+                df_data = pd.read_feather(os.path.join(self.train_data_path, "df_{}.feather".format(df_index)))
+                df_datasets_dict [df_index] = df_data
             # 遍历所有数据文件进行训练 / Train with all data files
+            log.info(f"epoch {epoch_counter + 1} start files")
             for i in range(df_number):
                 df_index = random_list[i]
                 # 单个数据文件训练过程 / Training with single data file
-                episode_counter, step_counter = self._train_data_file(episode_counter, step_counter, df_index, random_position_list, 
+                df_dataset= df_datasets_dict[df_index]
+                episode_counter, step_counter = self._train_data_file(df_dataset, i, episode_counter, step_counter, df_index, random_position_list, 
                                                                         epoch_return_rate_train_list,
                                                                         epoch_final_balance_train_list,
                                                                         epoch_required_money_train_list,
                                                                         epoch_reward_sum_train_list)
+                    
+               
+                
             # 更新训练轮次计数器 / Update epoch counter
             epoch_counter += 1            
             # 更新探索率(epsilon) / Update exploration rate (epsilon)
@@ -565,7 +598,7 @@ class DQN(object):
             if return_rate_eval > best_return_rate:
                 best_return_rate = return_rate_eval
                 best_model = self.eval_net.state_dict()
-                print("best model updated to epoch ", epoch_counter)
+                log.info(f"best model updated to epoch {epoch_counter}")
         # 保存最佳模型到指定路径 / Save best model to specified path
         best_model_path = os.path.join("./result/low_level", '{}'.format(self.dataset), '{}'.format(self.clf), str(self.label), 'best_model.pkl')
         torch.save(best_model.state_dict(), best_model_path)
@@ -656,7 +689,7 @@ class DQN(object):
         commission_fee_list = []
         # 遍历所有验证数据文件 / Iterate through all validation data files
         for i in range(df_number):
-            print("validating on df", df_list[i])
+            log.info(f"validating on df {df_list[i]}")
             # 加载验证数据文件 / Load validation data file
             self.df = pd.read_feather(os.path.join(self.val_data_path, "df_{}.feather".format(df_list[i])))   
             # 初始化测试环境 / Initialize testing environment         
@@ -698,10 +731,52 @@ class DQN(object):
         # 保存验证结果并计算平均收益率 / Save validation results and calculate mean return rate
         return_rate_mean = self._save_val_result(save_path, initial_action, action_list, reward_list, final_balance_list, required_money_list, commission_fee_list)
         return return_rate_mean
-        
+    
+from logging import StreamHandler, FileHandler, Formatter
+import logging as log
+import os
+import time
+def config_log(logs_dir,pfx=''):
+    today = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+    file_name = f'{today}.log'
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir, exist_ok=True)  # 确保目录存在
+    file_path = os.path.join(logs_dir, pfx+file_name)
 
+    # 创建一个日志格式化器
+    formatter = Formatter('%(asctime)s %(levelname)s: %(message)s')
+
+    # 创建文件处理器并设置格式化器
+    file_handler = FileHandler(file_path, encoding='utf-8')
+    file_handler.setFormatter(formatter)
+
+    # 创建流处理器（控制台）并设置格式化器
+    stream_handler = StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    # 获取根记录器并添加处理器
+    logger = log.getLogger()
+    logger.setLevel(log.INFO)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+    
 if __name__ == "__main__":
     args = parser.parse_args()
-    print(args)
+   
+    
+    # Create log directory
+ 
+    logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), '{}'.format(args.clf), str(int(args.alpha)), args.label)
+    os.makedirs(logs_dir, exist_ok=True) 
+    
+    config_log(logs_dir,pfx='')
+    log.info(args)
     agent = DQN(args)
+
+    
+    start_time = time.time()  # Start timing
+    log.info(f"start training {start_time}")
     agent.train()
+    end_time = time.time()  # End timing
+    duration = end_time - start_time
+    log.info(f"done, {end_time} total time: {duration:.2f} seconds")

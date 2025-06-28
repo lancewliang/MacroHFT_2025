@@ -229,11 +229,15 @@ def label_whole(df):
     return df
 
 if __name__ == "__main__":
+
     # 加载数据 -> 创建目录 -> 分块存储 -> 生成标签 -> 添加特征 -> 保存结果
     df_train = pd.read_feather('./data/ETHUSDT/df_train.feather')
     df_val = pd.read_feather('./data/ETHUSDT/df_val.feather')
     df_test = pd.read_feather('./data/ETHUSDT/df_test.feather')
-
+    print(f"data shape:{df_train.shape}")
+    print(df_train.columns)
+    print(df_train.head())
+    print(df_train.tail())
     os.makedirs('./data/ETHUSDT/train', exist_ok=True)
     os.makedirs('./data/ETHUSDT/val', exist_ok=True)
     os.makedirs('./data/ETHUSDT/test', exist_ok=True)
