@@ -688,7 +688,7 @@ if __name__ == "__main__":
     
     # Create log directory
  
-    logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), '{}'.format(args.clf), str(int(args.alpha)), args.label)
+    logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), '{}'.format(args.clf), str(args.alpha), args.label)
     os.makedirs(logs_dir, exist_ok=True) 
     
     config_log(logs_dir,pfx='train-')
