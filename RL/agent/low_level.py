@@ -59,11 +59,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import yaml
+import concurrent.futures
 import pickle
 import os
 import logging as log
 from torch.utils.tensorboard import SummaryWriter
 import warnings
+
 warnings.filterwarnings("ignore")
 
 ROOT = str(pathlib.Path(__file__).resolve().parents[3])
@@ -74,6 +76,7 @@ from model.net import *
 from env.low_level_env import Testing_Env, Training_Env
 from RL.util.utili import get_ada, get_epsilon, LinearDecaySchedule
 from RL.util.replay_buffer import ReplayBuffer
+from RL.agent.low_level_eval import DQN_EVAL
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -84,7 +87,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=5000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=50)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
+parser.add_argument("--batch_size",type=int,default=2048)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=100)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=2e-4)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.5)  # 初始探索率 / Initial exploration rate
@@ -103,7 +106,47 @@ parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Class
 parser.add_argument("--alpha",type=float,default=0)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 
-
+# def val_cluster(
+#                 dataset,clf,alpha,label,
+#                 n_state_1,n_state_2,n_action,device,
+#                 val_data_path,
+#                 tech_indicator_list,
+#                 tech_indicator_list_trend,
+#                 transcation_cost,
+#                 back_time_length,
+#                 max_holding_number,                    
+#                 epoch_path, save_path, initial_action, df_list): 
+def val_cluster(params,initial_action):
+    dataset=params['dataset']
+    clf=params['clf']
+    alpha=params['alpha']
+    label=params['label']
+    n_state_1=params['n_state_1']
+    n_state_2=params['n_state_2']
+    n_action=params['n_action']
+    device=params['device']
+                
+    val_data_path=params['val_data_path']
+    tech_indicator_list=params['tech_indicator_list']
+    tech_indicator_list_trend=params['tech_indicator_list_trend']
+    transcation_cost=params['transcation_cost']
+    back_time_length=params['back_time_length']
+    max_holding_number=params['max_holding_number']
+    epoch_path=params['epoch_path']
+    val_path=params['val_path']
+    df_list=params['df_list']
+        
+    logs_dir = os.path.join("./logs/low_level", '{}'.format(dataset), '{}'.format(clf), str(alpha), str(label))
+    config_log(logs_dir,pfx='val-')
+    dqn_eval = DQN_EVAL(n_state_1,n_state_2,n_action,device,
+                val_data_path,
+                tech_indicator_list,
+                tech_indicator_list_trend,
+                transcation_cost,
+                back_time_length,
+                max_holding_number)
+    return dqn_eval.val_cluster(epoch_path, val_path, int(initial_action), df_list)
+        
 def seed_torch(seed):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)  # 为了禁止hash随机化，使得实验可复现
@@ -203,6 +246,7 @@ class DQN(object):
         self.decay_length = args.decay_length
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
+        self.alpha = args.alpha
         
     def update(self, replay_buffer):
         """
@@ -317,36 +361,9 @@ class DQN(object):
             action = random.choice(action_choice)
         return action
 
-    def test_select_action(self, state, state_trend, info):
-        """
-        测试阶段选择最优动作（无随机探索）
-        
-        中文说明：
-        在测试阶段使用确定性策略选择最优动作，
-        不进行随机探索，完全依赖网络预测。
-        
-        English description:
-        Selects optimal action deterministically during testing phase,
-        no random exploration, fully relies on network prediction.
-        
-        Parameters:
-            state (np.array): 当前状态 / Current state
-            state_trend (np.array): 当前趋势状态 / Current trend state
-            info (dict): 包含历史信息的字典 / Dictionary containing historical information
-            
-        Returns:
-            int: 选择的动作编号 / Selected action number
-        """
-        x1 = torch.FloatTensor(state).to(self.device)
-        x2 = torch.FloatTensor(state_trend).to(self.device)
-        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long(), 0).to(self.device)
-        actions_value = self.eval_net(x1, x2, previous_action)
-        # 选择最优动作 / Select optimal action
-        action = torch.max(actions_value, 1)[1].data.cpu().numpy()
-        action = action[0]
-        return action
 
     def _train_data_file(self,
+                        df_path,
                         df_dataset, 
                         i,
                         episode_counter, 
@@ -396,6 +413,7 @@ class DQN(object):
                         
         # 初始化训练环境 / Initialize training environment
         train_env = Training_Env(
+                df_path=df_path,
                 df=self.df,
                 tech_indicator_list=self.tech_indicator_list,
                 tech_indicator_list_trend=self.tech_indicator_list_trend,
@@ -535,6 +553,8 @@ class DQN(object):
         best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record
         best_model = None                   # 最佳模型参数存储 / Best model parameters storage
         
+        #缓存训练数据，防止重复加载
+        df_datasets_dict = {}
         # 开始训练周期循环 / Start training epochs loop
         for sample in range(self.epoch_number):
             # 初始化周期统计列表 / Initialize epoch statistics lists
@@ -552,18 +572,22 @@ class DQN(object):
             random_position_list = random.choices(range(self.n_action), k=df_number)
             log.info(f"random_list:{random_list}")
             
-            df_datasets_dict = {}
+            
             for i in range(df_number):
                 df_index = random_list[i]
-                df_data = pd.read_feather(os.path.join(self.train_data_path, "df_{}.feather".format(df_index)))
-                df_datasets_dict [df_index] = df_data
+                if df_datasets_dict.get(df_index,None) is None:
+                    df_data = pd.read_feather(os.path.join(self.train_data_path, "df_{}.feather".format(df_index)))
+                    df_datasets_dict[df_index] = df_data
             # 遍历所有数据文件进行训练 / Train with all data files
             log.info(f"epoch {epoch_counter + 1} start files")
             for i in range(df_number):
                 df_index = random_list[i]
                 # 单个数据文件训练过程 / Training with single data file
                 df_dataset= df_datasets_dict[df_index]
-                episode_counter, step_counter = self._train_data_file(df_dataset, i, episode_counter, step_counter, df_index, random_position_list, 
+                df_dataset_path = os.path.join(self.train_data_path, "df_{}.feather".format(df_index))
+                episode_counter, step_counter = self._train_data_file(
+                                                                        df_dataset_path, df_dataset, 
+                                                                        i, episode_counter, step_counter, df_index, random_position_list, 
                                                                         epoch_return_rate_train_list,
                                                                         epoch_final_balance_train_list,
                                                                         epoch_required_money_train_list,
@@ -590,147 +614,45 @@ class DQN(object):
             if not os.path.exists(val_path):
                 os.makedirs(val_path)
             # 执行集群验证 / Execute cluster validation
-            return_rate_0 = self.val_cluster(epoch_path, val_path, 0)
-            return_rate_1 = self.val_cluster(epoch_path, val_path, 1)
+            with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
+                _df_list = self.val_index[self.label]
+                var_param = {
+                    'dataset': self.dataset,
+                    'clf':self.clf,
+                    'alpha':self.alpha,
+                    'label':self.label,
+                    'n_state_1':self.n_state_1,
+                    "n_state_2":self.n_state_2,
+                    "n_action":self.n_action,
+                    "device":self.device,
+                    "val_data_path":self.val_data_path,
+                    "tech_indicator_list": self.tech_indicator_list,
+                    "tech_indicator_list_trend":self.tech_indicator_list_trend,
+                    "transcation_cost": self.transcation_cost,
+                    "back_time_length": self.back_time_length,
+                    "max_holding_number": self.max_holding_number, 
+                    "epoch_path": epoch_path,                                           
+                    "val_path":val_path, 
+                    "df_list":_df_list
+                }
+                future0 = executor.submit(val_cluster, var_param, "0")
+                future1 = executor.submit(val_cluster, var_param, "1")
+                
+                return_rate_0 = future0.result()
+                return_rate_1 = future1.result()
             # 计算平均验证收益率 / Calculate average validation return rate
             return_rate_eval = (return_rate_0 + return_rate_1) / 2
             # 更新最佳模型 / Update best model if improved
             if return_rate_eval > best_return_rate:
                 best_return_rate = return_rate_eval
                 best_model = self.eval_net.state_dict()
-                log.info(f"best model updated to epoch {epoch_counter}")
+                log.info(f"best model updated to epoch {epoch_counter}.best_return_rate:{best_return_rate}")
         # 保存最佳模型到指定路径 / Save best model to specified path
-        best_model_path = os.path.join("./result/low_level", '{}'.format(self.dataset), '{}'.format(self.clf), str(self.label), 'best_model.pkl')
-        torch.save(best_model.state_dict(), best_model_path)
+        if best_model is not None:
+            best_model_path = os.path.join("./result/low_level", '{}'.format(self.dataset), '{}'.format(self.clf), str(self.label), 'best_model.pkl')
+            torch.save(best_model, best_model_path)
 
-    def _save_val_result(self, 
-                        save_path, 
-                        initial_action,
-                        action_list,
-                        reward_list,
-                        final_balance_list,
-                        required_money_list,
-                        commission_fee_list):
-        """
-        保存验证结果数据并计算平均收益率
-        
-        中文说明：
-        本函数负责将验证过程中收集的动作、奖励、账户余额等数据
-        转换为numpy数组并保存到指定路径，同时计算并返回平均收益率。
-        
-        English description:
-        This function converts validation data including actions, rewards, account balances
-        into numpy arrays and saves them to specified path. It also calculates and returns
-        the mean return rate.
-        
-        Parameters:
-            save_path (str): 结果保存路径 / Path to save validation results
-            initial_action (int): 初始动作标识 / Initial action identifier
-            action_list (list): 动作序列列表 / List of action sequences
-            reward_list (list): 奖励列表 / List of rewards
-            final_balance_list (list): 最终余额列表 / List of final balances
-            required_money_list (list): 所需资金列表 / List of required money
-            commission_fee_list (list): 手续费列表 / List of commission fees
-            
-        Returns:
-            float: 计算得到的平均收益率（已处理NaN值）
-        """
-        # 转换数据为numpy数组 / Convert lists to numpy arrays
-        action_list = np.array(action_list)
-        reward_list = np.array(reward_list)
-        final_balance_list = np.array(final_balance_list)
-        required_money_list = np.array(required_money_list)
-        commission_fee_list = np.array(commission_fee_list)
-        # 保存验证数据到npy文件 / Save validation data to npy files
-        np.save(os.path.join(save_path, "action_val_{}.npy".format(initial_action)), action_list)
-        np.save(os.path.join(save_path, "reward_val_{}.npy".format(initial_action)), reward_list)
-        np.save(os.path.join(save_path, "final_balance_val_{}.npy".format(initial_action)), final_balance_list)
-        np.save(os.path.join(save_path, "require_money_val_{}.npy".format(initial_action)), required_money_list)
-        np.save(os.path.join(save_path, "commission_fee_history_val_{}.npy".format(initial_action)), commission_fee_list)
-        # 计算平均收益率并保存 / Calculate and save mean return rate
-        # 使用nan_to_num处理可能存在的NaN值 / Handle possible NaN values with nan_to_num
-        return_rate_mean = np.nan_to_num(final_balance_list / required_money_list).mean()
-        np.save(os.path.join(save_path, "return_rate_mean_val_{}.npy".format(initial_action)), return_rate_mean)
-        # 返回计算结果 / Return calculated mean return rate
-        return return_rate_mean
-        
-    def val_cluster(self, epoch_path, save_path, initial_action):
-        """
-        在验证集上评估模型性能并生成评估结果
-        
-        中文说明：
-        本函数负责加载指定周期的训练模型，在验证集上执行测试，
-        收集动作、奖励、账户余额等指标，并保存验证结果。
-        
-        English description:
-        This function loads the trained model for specified epoch, executes testing on validation set,
-        collects metrics including actions, rewards, account balances, and saves validation results.
-        
-        Parameters:
-            epoch_path (str): 模型所在目录路径 / Path to trained model directory
-            save_path (str): 结果保存目录路径 / Path to save validation results
-            initial_action (int): 初始动作标识 / Initial action identifier
-            
-        Returns:
-            float: 计算得到的平均收益率（已处理NaN值）
-        """
-        # 加载训练模型 / Load trained model
-        self.eval_net.load_state_dict(torch.load(os.path.join(epoch_path, "trained_model.pkl")))
-        # 设置为验证模式 / Set evaluation mode
-        self.eval_net.eval()
-        # 获取验证数据索引列表 / Get validation data index list
-        df_list = self.val_index[self.label]
-        df_number=int(len(df_list)) 
-        # 初始化验证数据收集容器 / Initialize containers for validation data collection
-        action_list = []
-        reward_list = []
-        final_balance_list = []
-        required_money_list = []
-        commission_fee_list = []
-        # 遍历所有验证数据文件 / Iterate through all validation data files
-        for i in range(df_number):
-            log.info(f"validating on df {df_list[i]}")
-            # 加载验证数据文件 / Load validation data file
-            self.df = pd.read_feather(os.path.join(self.val_data_path, "df_{}.feather".format(df_list[i])))   
-            # 初始化测试环境 / Initialize testing environment         
-            val_env = Testing_Env(
-                    df=self.df,
-                    tech_indicator_list=self.tech_indicator_list,
-                    tech_indicator_list_trend=self.tech_indicator_list_trend,
-                    transcation_cost=self.transcation_cost,
-                    back_time_length=self.back_time_length,
-                    max_holding_number=self.max_holding_number,
-                    initial_action=initial_action)
-            # 重置环境获取初始状态 / Reset environment to get initial state
-            single_state, trend_state, info = val_env.reset()
-            done = False
-            # 单次验证过程的临时存储 / Temporary storage for current validation episode
-            action_list_episode = []
-            reward_list_episode = []
-            # 执行验证交互循环 / Execute validation interaction loop
-            while not done:
-                # 选择测试动作 / Select test action
-                action = self.test_select_action(single_state, trend_state, info)
-                # 执行动作获取下一个状态 / Execute action to get next state
-                next_single_state, next_trend_state, reward, done, next_info = val_env.step(action)
-                # 收集奖励和状态信息 / Collect reward and state information
-                reward_list_episode.append(reward)
-                single_state, trend_state, info = next_single_state, next_trend_state, next_info
-                action_list_episode.append(action)
-                # 获取账户信息（静默模式） / Get account information (silent mode)
-                portfit_magine, final_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
-            # 获取最终账户信息 / Get final account information
-            final_balance = val_env.final_balance
-            required_money = val_env.required_money
-            # 存储单次验证结果 / Store current validation episode results
-            action_list.append(action_list_episode)
-            reward_list.append(reward_list_episode)
-            final_balance_list.append(final_balance)
-            required_money_list.append(required_money)
-            commission_fee_list.append(commission_fee)
-        # 保存验证结果并计算平均收益率 / Save validation results and calculate mean return rate
-        return_rate_mean = self._save_val_result(save_path, initial_action, action_list, reward_list, final_balance_list, required_money_list, commission_fee_list)
-        return return_rate_mean
+    
     
 from logging import StreamHandler, FileHandler, Formatter
 import logging as log
@@ -769,7 +691,7 @@ if __name__ == "__main__":
     logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), '{}'.format(args.clf), str(int(args.alpha)), args.label)
     os.makedirs(logs_dir, exist_ok=True) 
     
-    config_log(logs_dir,pfx='')
+    config_log(logs_dir,pfx='train-')
     log.info(args)
     agent = DQN(args)
 
