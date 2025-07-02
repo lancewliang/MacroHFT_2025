@@ -135,9 +135,10 @@ def val_cluster(params,initial_action):
     epoch_path=params['epoch_path']
     val_path=params['val_path']
     df_list=params['df_list']
+    log_dir = params['log_dir']
         
-    logs_dir = os.path.join("./logs/low_level", '{}'.format(dataset), '{}'.format(clf), str(alpha), str(label))
-    config_log(logs_dir,pfx='val-')
+    
+    config_log(log_dir,pfx=f'val-{initial_action}-')
     dqn_eval = DQN_EVAL(n_state_1,n_state_2,n_action,device,
                 val_data_path,
                 tech_indicator_list,
@@ -174,6 +175,15 @@ class DQN(object):
         log.info(self.device)
         self.result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), '{}'.format(args.clf), str(int(args.alpha)), args.label)
         self.label = int(args.label.split('_')[1])
+        
+        
+        self.logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), '{}'.format(args.clf), str(int(args.alpha)), args.label)
+        os.makedirs(self.logs_dir, exist_ok=True) 
+        
+        config_log(self.logs_dir,pfx='train-')
+        log.info(args)
+        
+        
         self.model_path = os.path.join(self.result_path, "seed_{}".format(self.seed))
         self.train_data_path = os.path.join(ROOT, "MacroHFT", "data", args.dataset, "train")
         log.info(f'train_data_path:{self.train_data_path}')
@@ -613,10 +623,13 @@ class DQN(object):
             val_path = os.path.join(epoch_path, "val")
             if not os.path.exists(val_path):
                 os.makedirs(val_path)
+            return_rate_0 = 0 
+            return_rate_1 = 0
             # 执行集群验证 / Execute cluster validation
             with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
                 _df_list = self.val_index[self.label]
                 var_param = {
+                    'log_dir':self.logs_dir,
                     'dataset': self.dataset,
                     'clf':self.clf,
                     'alpha':self.alpha,
@@ -647,9 +660,10 @@ class DQN(object):
                 best_return_rate = return_rate_eval
                 best_model = self.eval_net.state_dict()
                 log.info(f"best model updated to epoch {epoch_counter}.best_return_rate:{best_return_rate}")
+        best_model = self.eval_net.state_dict()
         # 保存最佳模型到指定路径 / Save best model to specified path
         if best_model is not None:
-            best_model_path = os.path.join("./result/low_level", '{}'.format(self.dataset), '{}'.format(self.clf), str(self.label), 'best_model.pkl')
+            best_model_path = os.path.join(self.result_path, 'best_model.pkl')
             torch.save(best_model, best_model_path)
 
     
@@ -688,11 +702,7 @@ if __name__ == "__main__":
     
     # Create log directory
  
-    logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), '{}'.format(args.clf), str(args.alpha), args.label)
-    os.makedirs(logs_dir, exist_ok=True) 
-    
-    config_log(logs_dir,pfx='train-')
-    log.info(args)
+
     agent = DQN(args)
 
     
