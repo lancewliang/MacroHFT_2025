@@ -10,7 +10,7 @@ import torch
 import sys
 import pathlib
 import pdb
-
+import logging as log
 ROOT = str(pathlib.Path(__file__).resolve().parents[2])
 sys.path.append(ROOT)
 sys.path.insert(0, ".")
@@ -276,7 +276,10 @@ class Testing_Env(gym.Env):
             self.pured_balance = pure_balance
             self.final_balance = self.pured_balance + self.calculate_value(current_price_information, self.position)
             self.required_money = required_money
-            print("the portfit margine is ", self.final_balance / self.required_money) # 打印最终收益率
+            
+            portfit_margine = self.final_balance / self.required_money
+            log.info(f"the portfit return_margin:{return_margin},pure_balance:{pure_balance},required_money:{required_money},commission_fee:{commission_fee},final_balance:{self.final_balance},portfit_margine:{portfit_margine}")
+            
         # 返回观测值和环境状态
         return self.single_state, self.trend_state, self.clf_state.reshape(-1), self.reward, self.terminal, {
             "previous_action": action,
@@ -315,7 +318,7 @@ class Testing_Env(gym.Env):
         # 返回相对收益率、净收益、最大资金需求、总手续费
         return final_balance / required_money, final_balance, required_money, commission_fee
 
-
+q_table_dict = {}
 class Training_Env(Testing_Env):
     """
     训练专用交易环境类，继承自测试环境 Testing_Env
@@ -332,6 +335,7 @@ class Training_Env(Testing_Env):
     """
     def __init__(
         self,
+        df_path,
         df: pd.DataFrame,
         tech_indicator_list=tech_indicator_list,
         tech_indicator_list_trend=tech_indicator_list_trend,
@@ -360,13 +364,15 @@ class Training_Env(Testing_Env):
               self).__init__(df, tech_indicator_list, tech_indicator_list_trend, clf_list, transcation_cost,
                              back_time_length, max_holding_number)
         # 构建 Q 表（用于强化学习策略优化）
-        self.q_table = make_q_table_reward(df,
+        if q_table_dict.get(df_path,None) is None:      
+            q_table_dict[df_path] = make_q_table_reward(df,
                                            num_action=2,
                                            max_holding=max_holding_number,
                                            commission_fee=0.001,
                                            reward_scale=1,
                                            gamma=0.99,
                                            max_punish=1e12)
+        self.q_table = q_table_dict[df_path]
         # 记录初始动作
         self.initial_action = initial_action
 
