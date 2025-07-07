@@ -120,7 +120,7 @@ class Testing_Env(gym.Env):
         self.sell_money_memory = []
         self.comission_fee_history = []
         self.position = 0
-
+        self.final_balance=0
 
 
     def calculate_value(self, price_information, position):
@@ -312,7 +312,10 @@ class Testing_Env(gym.Env):
             # 累计计算每个时间点的余额
             balance_list.append(np.sum(true_money[:i + 1]))
         # 计算最大资金需求（历史最低余额的绝对值） （风险度量指标） 
-        required_money = -np.min(balance_list)
+        if len(balance_list)>0:
+            required_money = -np.min(balance_list)
+        else:
+            required_money = 0
         # 计算总手续费（注意：字段名存在拼写错误 comission -> commission）
         commission_fee = np.sum(self.comission_fee_history)
         # 返回相对收益率、净收益、最大资金需求、总手续费

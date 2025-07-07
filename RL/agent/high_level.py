@@ -12,7 +12,9 @@ import joblib
 from torch.utils.tensorboard import SummaryWriter
 import warnings
 warnings.filterwarnings("ignore")
-
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
 ROOT = str(pathlib.Path(__file__).resolve().parents[3])
 sys.path.append(ROOT)
 sys.path.insert(0, ".")
@@ -22,17 +24,17 @@ from env.high_level_env import Testing_Env, Training_Env
 from RL.util.utili import get_ada, get_epsilon, LinearDecaySchedule
 from RL.util.replay_buffer import ReplayBuffer_High
 from RL.util.memory import episodicmemory
-
+from RL.agent.high_level_eval import DQN_EVAL
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=50000000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=5000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=10)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=2048)  # 批次大小 / Mini-batch size
+parser.add_argument("--batch_size",type=int,default=4096)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=100)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=2e-4)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.5)  # 初始探索率 / Initial exploration rate
@@ -45,36 +47,39 @@ parser.add_argument("--transcation_cost",type=float,default=4.0 / 10000)  # 交�
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
+parser.add_argument("--epoch_number",type=int,default=5)  # 训练轮次数 / Training epochs
 parser.add_argument("--alpha",type=float,default=0)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 parser.add_argument("--beta",type=int,default=5)
 parser.add_argument("--exp",type=str,default="exp1")
 parser.add_argument("--num_step",type=int,default=10)
+parser.add_argument('--num_processes', type=int, default=4, help='Number of processes (default: 2)')
 
-
-def seed_torch(seed):
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+def seed_torch(seed,rank):
+    random.seed(seed+rank)
+    os.environ['PYTHONHASHSEED'] = str(seed+rank)
+    np.random.seed(seed+rank)
+    torch.manual_seed(seed+rank)
+    torch.cuda.manual_seed(seed+rank)
+    torch.cuda.manual_seed_all(seed+rank)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
 
 class DQN(object):
-    def __init__(self, args):  # 定义DQN的一系列属性
+    def __init__(self, rank, world_size, args):  # 定义DQN的一系列属性
+        
+        self.rank = rank
+        self.world_size = world_size
         self.seed = args.seed
-        seed_torch(self.seed)
+        seed_torch(self.seed,self.rank)
         if torch.cuda.is_available():
             self.device = torch.device(args.device)
         else:
             self.device = torch.device("cpu")
             
             
-        self.logs_dir = os.path.join("./logs/high_level", '{}'.format(args.dataset), args.exp)
+        self.logs_dir = os.path.join("./logs/high_level", '{}'.format(args.dataset), args.exp, str(rank))
         os.makedirs(self.logs_dir, exist_ok=True) 
         
         config_log(self.logs_dir,pfx='')
@@ -100,7 +105,7 @@ class DQN(object):
             raise Exception ("we do not support other dataset yet")
         self.epoch_number = args.epoch_number
         
-        self.log_path = os.path.join(self.model_path, "log")
+        self.log_path = os.path.join(self.model_path,"log", str(self.rank))
         if not os.path.exists(self.log_path):
             os.makedirs(self.log_path)
         self.writer = SummaryWriter(self.log_path)
@@ -159,9 +164,12 @@ class DQN(object):
         }
         self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
         self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
-        self.hyperagent_target.load_state_dict(self.hyperagent.state_dict())
+        
+        self.policy_hyperagent_ddp = DDP(self.hyperagent, device_ids=[0])
+        self.hyperagent_target.load_state_dict(self.policy_hyperagent_ddp.module.state_dict())
+        
         self.update_times = args.update_times
-        self.optimizer = torch.optim.Adam(self.hyperagent.parameters(), lr=args.lr)
+        self.optimizer = torch.optim.Adam(self.policy_hyperagent_ddp.parameters(), lr=args.lr)
         self.loss_func = nn.MSELoss()
         self.batch_size = args.batch_size
         self.gamma = args.gamma
@@ -175,6 +183,11 @@ class DQN(object):
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
         self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, 64, self.device)
+        self.alpha = args.alpha
+        self.beta = args.beta
+        
+
+        self.replay_buffer = ReplayBuffer_High(args, self.n_state_1, self.n_state_2, self.n_action) 
 
     def calculate_q(self, w, qs):
         q_tensor = torch.stack(qs)
@@ -206,9 +219,9 @@ class DQN(object):
         batch = {k: v.to(self.device) for k, v in batch.items()}
         # Calculate current and target hypernetwork outputs
         # 计算当前和目标超网络输出
-        w_current = self.hyperagent(batch['state'], batch['state_trend'], batch['state_clf'], batch['previous_action'])
+        w_current = self.policy_hyperagent_ddp(batch['state'], batch['state_trend'], batch['state_clf'], batch['previous_action'])
         w_next = self.hyperagent_target(batch['next_state'], batch['next_state_trend'], batch['next_state_clf'], batch['next_previous_action'])
-        w_next_ = self.hyperagent(batch['next_state'], batch['next_state_trend'], batch['next_state_clf'], batch['next_previous_action'])
+        w_next_ = self.policy_hyperagent_ddp(batch['next_state'], batch['next_state_trend'], batch['next_state_clf'], batch['next_previous_action'])
 
         # Compute Q-values from slope/volatility agents
         # 计算斜率/波动率代理的Q值
@@ -251,13 +264,13 @@ class DQN(object):
         )
         # Total loss with weighted components
         # 加权总损失
-        loss = td_error + args.alpha * memory_error + args.beta * KL_loss
+        loss = td_error + self.alpha * memory_error + self.beta * KL_loss
         self.optimizer.zero_grad()
         loss.backward()
 
-        torch.nn.utils.clip_grad_norm_(self.hyperagent.parameters(), 1)
+        torch.nn.utils.clip_grad_norm_(self.policy_hyperagent_ddp.parameters(), 1)
         self.optimizer.step()
-        for param, target_param in zip(self.hyperagent.parameters(), self.hyperagent_target.parameters()):
+        for param, target_param in zip(self.policy_hyperagent_ddp.parameters(), self.hyperagent_target.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
         self.update_counter += 1
         return td_error.cpu(), memory_error.cpu(), KL_loss.cpu(), torch.mean(q_current.cpu()), torch.mean(q_target.cpu())
@@ -301,7 +314,7 @@ class DQN(object):
             ]
             # Calculate hypernetwork output
             # 计算超网络输出
-            w = self.hyperagent(x1, x2, x3, previous_action)
+            w = self.policy_hyperagent_ddp(x1, x2, x3, previous_action)
             # Combine Q-values using hypernetwork weights
             # 使用超网络权重组合Q值
             actions_value = self.calculate_q(w, qs)
@@ -314,37 +327,6 @@ class DQN(object):
             action = random.choice(action_choice)
         return action
 
-    def act_test(self, state, state_trend, state_clf, info):
-        """
-        测试模式下的动作选择（无随机性）
-        
-        Args:
-            state: 当前状态
-            state_trend: 状态趋势
-            state_clf: 状态分类特征
-            info: 包含历史动作等信息的字典
-            
-        Returns:
-            int: 确定性选择的最优动作
-        """
-        with torch.no_grad():
-            x1 = torch.FloatTensor(state).to(self.device)
-            x2 = torch.FloatTensor(state_trend).to(self.device)
-            x3 = torch.FloatTensor(state_clf).unsqueeze(0).to(self.device)
-            previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.device), 0).to(self.device)
-            qs = [
-                    self.slope_agents[0](x1, x2, previous_action),
-                    self.slope_agents[1](x1, x2, previous_action),
-                    self.slope_agents[2](x1, x2, previous_action),
-                    self.vol_agents[0](x1, x2, previous_action),
-                    self.vol_agents[1](x1, x2, previous_action),
-                    self.vol_agents[2](x1, x2, previous_action)
-            ]
-            w = self.hyperagent(x1, x2, x3, previous_action)
-            actions_value = self.calculate_q(w, qs)
-            action = torch.max(actions_value, 1)[1].data.cpu().numpy()
-            action = action[0]
-            return action
 
     def q_estimate(self, state, state_trend, state_clf, info):
         """
@@ -379,7 +361,7 @@ class DQN(object):
         ]
         # Calculate hypernetwork output
         # 计算超网络输出
-        w = self.hyperagent(x1, x2, x3, previous_action)
+        w = self.policy_hyperagent_ddp(x1, x2, x3, previous_action)
         # Combine Q-values using hypernetwork weights
         # 使用超网络权重组合Q值
         actions_value = self.calculate_q(w, qs)
@@ -409,7 +391,7 @@ class DQN(object):
         with torch.no_grad():
             # Encode to get hidden state representation
             # 编码获取隐藏状态表示
-            hs = self.hyperagent.encode(x1, x2, previous_action).cpu().numpy()
+            hs = self.policy_hyperagent_ddp.module.encode(x1, x2, previous_action).cpu().numpy()
         return hs
     
     
@@ -455,7 +437,7 @@ class DQN(object):
                 alpha = 0)
         single_state, trend_state, clf_state, info = train_env.reset()
         episode_reward_sum = 0
-        
+        log.info(f"reset env {self.rank}")
         while True:
             # 使用ε-greedy策略选择动作
             # Select action using ε-greedy strategy
@@ -493,6 +475,7 @@ class DQN(object):
             # 定期执行模型更新
             # Periodically update model parameters
             if step_counter % self.eval_update_freq == 0 and step_counter > (self.batch_size + self.n_step):
+                log.info(f"update model {self.rank} {step_counter} ")
                 for i in range(self.update_times):
                     td_error, memory_error, KL_loss, q_eval, q_target = self.update(self.replay_buffer)
                     if self.update_counter % self.q_value_memorize_freq == 1:
@@ -504,7 +487,7 @@ class DQN(object):
                 if step_counter > 4320:
                     # 定期重新编码记忆
                     # Periodically re-encode memory
-                    self.memory.re_encode(self.hyperagent)
+                    self.memory.re_encode(self.policy_hyperagent_ddp.module)
             if done:
                 break
         episode_counter += 1
@@ -559,7 +542,7 @@ class DQN(object):
         self.writer.add_scalar(tag="epoch_final_balance_train", scalar_value=mean_final_balance_train, global_step=epoch_counter, walltime=None)
         self.writer.add_scalar(tag="epoch_required_money_train", scalar_value=mean_required_money_train, global_step=epoch_counter, walltime=None)
         self.writer.add_scalar(tag="epoch_reward_sum_train", scalar_value=mean_reward_sum_train, global_step=epoch_counter, walltime=None)
-        torch.save(self.hyperagent.state_dict(), os.path.join(epoch_path, "trained_model.pkl"))  
+        torch.save(self.policy_hyperagent_ddp.module.state_dict(), os.path.join(epoch_path, "trained_model.pkl"))  
         
     def train(self):
         """
@@ -582,23 +565,28 @@ class DQN(object):
         返回值:
             None (模型保存到磁盘文件)
         """
+       
         step_counter = 0
         episode_counter = 0
         epoch_counter = 0
         best_return_rate = -float('inf')
         best_model = None
-        
+        log.info(f'load train data {self.rank}')
         self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather"))
         # 初始化经验回放缓冲区
         # Initialize replay buffer for experience storage
-        self.replay_buffer = ReplayBuffer_High(args, self.n_state_1, self.n_state_2, self.n_action) 
+        log.info(f'broadcast_object_list {self.rank}')
+
+        for param in self.policy_hyperagent_ddp.parameters():
+            dist.broadcast(param.data, src=0)
+        log.info(f'start epoch_number')    
         for sample in range(self.epoch_number):
             epoch_return_rate_train_list = []
             epoch_final_balance_train_list = []
             epoch_required_money_train_list = []
             epoch_reward_sum_train_list = []
             
-            log.info(f'epoch {epoch_counter + 1}')
+            log.info(f'start epoch {self.rank} {sample}')
             episode_counter, step_counter = self._train_data_file(episode_counter, step_counter, 
                                                                         epoch_return_rate_train_list,
                                                                         epoch_final_balance_train_list,
@@ -608,8 +596,8 @@ class DQN(object):
             # 更新探索率(epsilon)
             # Update exploration rate (epsilon)
             self.epsilon = self.epsilon_scheduler.get_epsilon(epoch_counter)
-            
-            epoch_path = os.path.join(self.model_path, "epoch_{}".format(epoch_counter))
+             
+            epoch_path = os.path.join(self.model_path,str(self.rank), "epoch_{}".format(epoch_counter))
             if not os.path.exists(epoch_path):
                 os.makedirs(epoch_path)
             self._save_trained_model(epoch_counter,epoch_path,
@@ -617,129 +605,69 @@ class DQN(object):
                                         epoch_final_balance_train_list,
                                         epoch_required_money_train_list,
                                         epoch_reward_sum_train_list  )
+            log.info(f'end epoch trained {self.rank} {sample}')    
+            dist.barrier()
             # 执行验证评估
             # Execute validation evaluation
-            val_path = os.path.join(epoch_path, "val")
-            if not os.path.exists(val_path):
+            if self.rank == 0:
+                val_path = os.path.join(epoch_path, "val")
+                if not os.path.exists(val_path):
                     os.makedirs(val_path)
-            return_rate_eval = self.val_cluster(epoch_path, val_path)
-            # 更新最佳模型
-            # Update best model if improved
-            if return_rate_eval > best_return_rate:
-                best_return_rate = return_rate_eval
-                best_model = self.hyperagent.state_dict()
-                log.info(f"best model updated to epoch {epoch_counter}.best_return_rate:{best_return_rate}")
-        # 保存最佳模型到文件
-        # Save best model to disk
-        best_model_path = os.path.join("./result/high_level", '{}'.format(self.dataset), 'best_model.pkl')
-        torch.save(best_model.state_dict(), best_model_path)
+                log.info(f'end epoch val {self.rank} {sample}')  
+                dqn_eval = DQN_EVAL(self.n_state_1,
+                                    self.n_state_2,
+                                    self.n_action,
+                                    self.device,
+                                    self.clf_list,
+                                    self.test_data_path,
+                                    self.val_data_path,
+                                    self.tech_indicator_list,
+                                    self.tech_indicator_list_trend,
+                                    self.transcation_cost,
+                                    self.back_time_length,
+                                    self.max_holding_number,
+                                    self.slope_agents,
+                                    self.vol_agents
+                                    )
+                return_rate_eval = dqn_eval.val_cluster(epoch_path, val_path)
+                # 更新最佳模型
+                # Update best model if improved
+                if return_rate_eval > best_return_rate:
+                    best_return_rate = return_rate_eval
+                    best_model = self.policy_hyperagent_ddp.module.state_dict()
+                    log.info(f"best model updated to epoch {epoch_counter}.best_return_rate:{best_return_rate}")
+                    
+        dist.barrier()
         
-        # 执行最终测试评估
-        # Execute final test evaluation
-        final_result_path = os.path.join("./result/high_level", '{}'.format(self.dataset))
-        self.test_cluster(best_model_path, final_result_path)
-
-
-    def val_cluster(self, epoch_path, save_path):
-        self.hyperagent.load_state_dict(
-            torch.load(os.path.join(epoch_path, "trained_model.pkl")))
-        self.hyperagent.eval()
-        counter = False
-        action_list = []
-        reward_list = []
-        final_balance_list = []
-        required_money_list = []
-        commission_fee_list = []
-        self.df = pd.read_feather(os.path.join(self.val_data_path, "val.feather"))
+        if self.rank == 0:
+            # 保存最佳模型到文件
+            # Save best model to disk
+            log.info(f'end epoch test {self.rank}') 
+            best_model_path = os.path.join("./result/high_level", '{}'.format(self.dataset), 'best_model.pkl')
+            torch.save(best_model, best_model_path)
+            dqn_eval = DQN_EVAL(self.n_state_1,
+                                self.n_state_2,
+                                self.n_action,
+                                self.device,
+                                self.clf_list,
+                                self.test_data_path,
+                                self.val_data_path,
+                                self.tech_indicator_list,
+                                self.tech_indicator_list_trend,
+                                self.transcation_cost,
+                                self.back_time_length,
+                                self.max_holding_number,
+                                self.slope_agents,
+                                self.vol_agents
+                                )
+            # 执行最终测试评估
+            # Execute final test evaluation
+            
+            final_result_path = os.path.join("./result/high_level", '{}'.format(self.dataset))
+            dqn_eval.test_cluster(best_model_path, final_result_path)
+            
         
-        val_env = Testing_Env(
-                df=self.df,
-                tech_indicator_list=self.tech_indicator_list,
-                tech_indicator_list_trend=self.tech_indicator_list_trend,
-                clf_list=self.clf_list,
-                transcation_cost=self.transcation_cost,
-                back_time_length=self.back_time_length,
-                max_holding_number=self.max_holding_number,
-                initial_action=0)
-        s, s2, s3, info = val_env.reset()
-        done = False
-        action_list_episode = []
-        reward_list_episode = []
-        while not done:
-            a = self.act_test(s, s2, s3, info)
-            s_, s2_, s3_, r, done, info_ = val_env.step(a)
-            reward_list_episode.append(r)
-            s, s2, s3, info = s_, s2_, s3_, info_
-            action_list_episode.append(a)
-        portfit_magine, final_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
-        final_balance = val_env.final_balance
-        action_list.append(action_list_episode)
-        reward_list.append(reward_list_episode)
-        final_balance_list.append(final_balance)
-        required_money_list.append(required_money)
-        commission_fee_list.append(commission_fee)
-        action_list = np.array(action_list)
-        reward_list = np.array(reward_list)
-        final_balance_list = np.array(final_balance_list)
-        required_money_list = np.array(required_money_list)
-        commission_fee_list = np.array(commission_fee_list)
-        np.save(os.path.join(save_path, "action_val.npy"), action_list)
-        np.save(os.path.join(save_path, "reward_val.npy"), reward_list)
-        np.save(os.path.join(save_path, "final_balance_val.npy"), final_balance_list)
-        np.save(os.path.join(save_path, "require_money_val.npy"), required_money_list)
-        np.save(os.path.join(save_path, "commission_fee_history_val.npy"), commission_fee_list)
-        return_rate = final_balance / required_money
-        return return_rate
 
-    def test_cluster(self, epoch_path, save_path):
-        self.hyperagent.load_state_dict(
-            torch.load(os.path.join(epoch_path, "trained_model.pkl")))
-        self.hyperagent.eval()
-        counter = False
-        action_list = []
-        reward_list = []
-        final_balance_list = []
-        required_money_list = []
-        commission_fee_list = []
-        self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather"))
-        
-        test_env = Testing_Env(
-                df=self.df,
-                tech_indicator_list=self.tech_indicator_list,
-                tech_indicator_list_trend=self.tech_indicator_list_trend,
-                clf_list=self.clf_list,
-                transcation_cost=self.transcation_cost,
-                back_time_length=self.back_time_length,
-                max_holding_number=self.max_holding_number,
-                initial_action=0)
-        s, s2, s3, info = test_env.reset()
-        done = False
-        action_list_episode = []
-        reward_list_episode = []
-        while not done:
-            a = self.act_test(s, s2, s3, info)
-            s_, s2_, s3_, r, done, info_ = test_env.step(a)
-            reward_list_episode.append(r)
-            s, s2, s3, info = s_, s2_, s3_, info_
-            action_list_episode.append(a)
-        portfit_magine, final_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)
-        final_balance = test_env.final_balance
-        action_list.append(action_list_episode)
-        reward_list.append(reward_list_episode)
-        final_balance_list.append(final_balance)
-        required_money_list.append(required_money)
-        commission_fee_list.append(commission_fee)
-
-        action_list = np.array(action_list)
-        reward_list = np.array(reward_list)
-        final_balance_list = np.array(final_balance_list)
-        required_money_list = np.array(required_money_list)
-        commission_fee_list = np.array(commission_fee_list)
-        np.save(os.path.join(save_path, "action.npy"), action_list)
-        np.save(os.path.join(save_path, "reward.npy"), reward_list)
-        np.save(os.path.join(save_path, "final_balance.npy"), final_balance_list)
-        np.save(os.path.join(save_path, "require_money.npy"), required_money_list)
-        np.save(os.path.join(save_path, "commission_fee_history.npy"), commission_fee_list)
             
 
     
@@ -771,9 +699,26 @@ def config_log(logs_dir,pfx=''):
     logger.addHandler(file_handler)
     logger.addHandler(stream_handler)
     
+    
+
+ 
+def main_train(rank,world_size,args):
+    """训练主函数"""
+    os.environ["USE_LIBUV"] = "0"
+    os.environ["USE_GLOO_WITH_LIBUV"] = "0"
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    
+    os.environ["PL_TORCH_DISTRIBUTED_BACKEND"] = "gloo"  
+    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+
+    agent = DQN(rank,world_size,args)
+    agent.train()
+    dist.destroy_process_group()
 
 if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
-    agent = DQN(args)
-    agent.train()
+    world_size = args.num_processes
+     
+    mp.spawn(main_train, args=(world_size, args), nprocs=world_size, join=True)
