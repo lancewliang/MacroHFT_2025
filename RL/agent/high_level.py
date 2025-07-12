@@ -196,9 +196,54 @@ class DQN(object):
         combined_q = torch.bmm(weights_reshaped, q_tensor).squeeze(1)
         
         return combined_q
-
-
-    def update(self, replay_buffer):
+    
+    # ==============================
+    # 4. 验证函数
+    # ==============================
+    def verify_gradients(self,model, rank, world_size):
+        """检查所有进程的梯度是否一致（DDP正常工作时梯度应平均后同步）"""
+        for i, param in enumerate(model.parameters()):
+            grad = param.grad.clone() if param.grad is not None else torch.zeros_like(param.data)
+            grad_norm = torch.norm(grad).item()
+            
+            # 收集所有进程的梯度范数
+            grad_norms = [torch.zeros(1) for _ in range(world_size)]
+            dist.all_gather(grad_norms, torch.tensor([grad_norm]).to(grad.device))
+            
+            if rank == 0:
+                assert all(np.isclose(grad_norm, g.item(), atol=1e-6) for g in grad_norms), \
+                    f"Gradient mismatch at layer {i}! Norms: {[g.item() for g in grad_norms]}"
+ 
+    def check_parameter_consistency(self, model, rank, world_size):
+        """检查所有进程的模型参数是否一致"""
+        local_params = [p.data.clone() for p in model.parameters()]
+        
+        # 主进程收集所有参数
+        if rank == 0:
+            all_params = [[] for _ in range(world_size)]
+        else:
+            all_params = None
+        
+        for i, param in enumerate(local_params):
+            gathered_params = [torch.zeros_like(param) for _ in range(world_size)]
+            dist.all_gather(gathered_params, param)
+            
+            if rank == 0:
+                all_params[i] = gathered_params
+        
+        # 主进程检查一致性
+        if rank == 0:
+            for i, param_list in enumerate(all_params):
+                first_param = param_list[0]
+                for j, param in enumerate(param_list[1:]):
+                    if not torch.allclose(first_param, param, atol=1e-6):
+                        print(f"Parameter mismatch at layer {i}, process {j+1}!")
+                        return False
+            return True
+        else:
+            return True  # 其他进程不参与判断
+        
+    def update(self, step_counter, replay_buffer):
         """
         更新策略网络参数，包含TD误差、记忆误差和KL散度的联合优化
         
@@ -266,10 +311,14 @@ class DQN(object):
         # 加权总损失
         loss = td_error + self.alpha * memory_error + self.beta * KL_loss
         self.optimizer.zero_grad()
-        loss.backward()
+        loss.backward() 
 
         torch.nn.utils.clip_grad_norm_(self.policy_hyperagent_ddp.parameters(), 1)
         self.optimizer.step()
+        
+       
+ 
+        
         for param, target_param in zip(self.policy_hyperagent_ddp.parameters(), self.hyperagent_target.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
         self.update_counter += 1
@@ -477,13 +526,19 @@ class DQN(object):
             if step_counter % self.eval_update_freq == 0 and step_counter > (self.batch_size + self.n_step):
                 log.info(f"update model {self.rank} {step_counter} ")
                 for i in range(self.update_times):
-                    td_error, memory_error, KL_loss, q_eval, q_target = self.update(self.replay_buffer)
+                    td_error, memory_error, KL_loss, q_eval, q_target = self.update(step_counter,self.replay_buffer)
                     if self.update_counter % self.q_value_memorize_freq == 1:
                         self.writer.add_scalar(tag="td_error", scalar_value=td_error, global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="memory_error", scalar_value=memory_error, global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="KL_loss", scalar_value=KL_loss, global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_eval", scalar_value=q_eval, global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_target", scalar_value=q_target, global_step=self.update_counter, walltime=None)
+                 # --- 关键验证2：定期检查所有进程参数是否一致 ---
+                if step_counter % 10 == 0:
+                    self.verify_gradients(self.policy_hyperagent_ddp, self.rank, world_size)
+                    all_params_equal = self.check_parameter_consistency(self.policy_hyperagent_ddp, self.rank, world_size)
+                    if self.rank == 0:
+                        log.info(f"step_counter {step_counter}, Parameters consistent: {all_params_equal}")
                 if step_counter > 4320:
                     # 定期重新编码记忆
                     # Periodically re-encode memory
