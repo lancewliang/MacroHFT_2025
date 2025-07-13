@@ -29,24 +29,24 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=50000000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=10)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=2048)  # 批次大小 / Mini-batch size
-parser.add_argument("--eval_update_freq",type=int,default=100)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=2e-4)  # 学习率 / Learning rate
-parser.add_argument("--epsilon_start",type=float,default=0.5)  # 初始探索率 / Initial exploration rate
-parser.add_argument("--epsilon_end",type=float,default=0.1)  # 最小探索率 / Minimum exploration rate
+parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
+parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
+parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
+parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
+parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
 parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=4.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=2.0 / 100000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
-parser.add_argument("--alpha",type=float,default=0)  # KL损失权重系数 / KL loss weight coefficient
+parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 parser.add_argument("--beta",type=int,default=5)
 parser.add_argument("--exp",type=str,default="exp1")
@@ -455,7 +455,7 @@ class DQN(object):
                 alpha = 0)
         single_state, trend_state, clf_state, info = train_env.reset()
         episode_reward_sum = 0
-        
+        log.info(f" train_env reset done")
         while True:
             # 使用ε-greedy策略选择动作
             # Select action using ε-greedy strategy
@@ -493,6 +493,7 @@ class DQN(object):
             # 定期执行模型更新
             # Periodically update model parameters
             if step_counter % self.eval_update_freq == 0 and step_counter > (self.batch_size + self.n_step):
+                log.info(f"update network {step_counter}")
                 for i in range(self.update_times):
                     td_error, memory_error, KL_loss, q_eval, q_target = self.update(self.replay_buffer)
                     if self.update_counter % self.q_value_memorize_freq == 1:
@@ -505,12 +506,19 @@ class DQN(object):
                     # 定期重新编码记忆
                     # Periodically re-encode memory
                     self.memory.re_encode(self.hyperagent)
+                return_margin, pure_balance, required_money, commission_fee = train_env.get_final_return_rate()
+                final_balance = pure_balance + train_env.calculate_value(next_info['previous_price_information'], train_env.position)
+                portfit_margine = final_balance / required_money
+                log.info(f"update network {step_counter} return_margin:{return_margin:.2f},portfit_margine:{portfit_margine:.2f},final_balance:{final_balance:.2f},pure_balance:{pure_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
+            
             if done:
+                log.info(f" train_env step done")
                 break
         episode_counter += 1
         # 获取最终收益指标
         # Get final financial metrics
         final_balance, required_money = train_env.final_balance, train_env.required_money
+        
         self.writer.add_scalar(tag="return_rate_train", scalar_value=final_balance / (required_money), global_step=episode_counter, walltime=None)
         self.writer.add_scalar(tag="final_balance_train", scalar_value=final_balance, global_step=episode_counter, walltime=None)
         self.writer.add_scalar(tag="required_money_train", scalar_value=required_money, global_step=episode_counter, walltime=None)
@@ -621,18 +629,18 @@ class DQN(object):
             # Execute validation evaluation
             val_path = os.path.join(epoch_path, "val")
             if not os.path.exists(val_path):
-                    os.makedirs(val_path)
+                os.makedirs(val_path)
             return_rate_eval = self.val_cluster(epoch_path, val_path)
             # 更新最佳模型
             # Update best model if improved
             if return_rate_eval > best_return_rate:
                 best_return_rate = return_rate_eval
                 best_model = self.hyperagent.state_dict()
-                log.info(f"best model updated to epoch {epoch_counter}.best_return_rate:{best_return_rate}")
-        # 保存最佳模型到文件
-        # Save best model to disk
-        best_model_path = os.path.join("./result/high_level", '{}'.format(self.dataset), 'best_model.pkl')
-        torch.save(best_model.state_dict(), best_model_path)
+                best_model_path = os.path.join("./result/high_level", '{}'.format(self.dataset), 'best_model.pkl')
+                torch.save(best_model, best_model_path)
+                # 保存最佳模型到文件
+                # Save best model to disk
+
         
         # 执行最终测试评估
         # Execute final test evaluation
@@ -671,7 +679,12 @@ class DQN(object):
             reward_list_episode.append(r)
             s, s2, s3, info = s_, s2_, s3_, info_
             action_list_episode.append(a)
-        portfit_magine, final_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
+        return_margin, pure_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
+        final_balance = pure_balance + val_env.calculate_value(info_['previous_price_information'], val_env.position)
+        portfit_margine = final_balance / required_money
+        log.info(f"val return_margin:{return_margin:.2f},portfit_margine:{portfit_margine:.2f},final_balance:{final_balance:.2f},pure_balance:{pure_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
+     
+        
         final_balance = val_env.final_balance
         action_list.append(action_list_episode)
         reward_list.append(reward_list_episode)
@@ -722,7 +735,12 @@ class DQN(object):
             reward_list_episode.append(r)
             s, s2, s3, info = s_, s2_, s3_, info_
             action_list_episode.append(a)
-        portfit_magine, final_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)
+        return_margin, pure_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)    
+        final_balance = pure_balance + test_env.calculate_value(info_['previous_price_information'], test_env.position)
+        portfit_margine = final_balance / required_money
+        log.info(f"val return_margin:{return_margin:.2f},portfit_margine:{portfit_margine:.2f},final_balance:{final_balance:.2f},pure_balance:{pure_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
+         
+        
         final_balance = test_env.final_balance
         action_list.append(action_list_episode)
         reward_list.append(reward_list_episode)

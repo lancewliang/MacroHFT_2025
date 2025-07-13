@@ -278,13 +278,14 @@ class Testing_Env(gym.Env):
             self.required_money = required_money
             
             portfit_margine = self.final_balance / self.required_money
-            log.info(f"the portfit return_margin:{return_margin},pure_balance:{pure_balance},required_money:{required_money},commission_fee:{commission_fee},final_balance:{self.final_balance},portfit_margine:{portfit_margine}")
+            log.info(f"terminal the portfit return_margin:{return_margin:.2f},portfit_margine:{portfit_margine:.2f},final_balance:{self.final_balance:.2f},pure_balance:{pure_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
             
         # 返回观测值和环境状态
         return self.single_state, self.trend_state, self.clf_state.reshape(-1), self.reward, self.terminal, {
             "previous_action": action,
+            "previous_price_information": current_price_information,
         }
-
+    
     def get_final_return_rate(self, slient=False):
         """
         计算交易策略的最终收益指标（包含风险调整后的收益率）

@@ -86,24 +86,24 @@ os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=5000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
-parser.add_argument("--q_value_memorize_freq",type=int, default=50)  # Q值记忆频率 / Q-value logging frequency
+parser.add_argument("--q_value_memorize_freq",type=int, default=10)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=2048)  # 批次大小 / Mini-batch size
-parser.add_argument("--eval_update_freq",type=int,default=100)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=2e-4)  # 学习率 / Learning rate
-parser.add_argument("--epsilon_start",type=float,default=0.5)  # 初始探索率 / Initial exploration rate
-parser.add_argument("--epsilon_end",type=float,default=0.1)  # 最小探索率 / Minimum exploration rate
+parser.add_argument("--eval_update_freq",type=int,default=2048)  # 网络更新频率 / Network update frequency
+parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
+parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
+parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
 parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=4.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=2.0 / 1000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=15)  # 训练轮次数 / Training epochs
 parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
 parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
-parser.add_argument("--alpha",type=float,default=0)  # KL损失权重系数 / KL loss weight coefficient
+parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 
 # def val_cluster(
