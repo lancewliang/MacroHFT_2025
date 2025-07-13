@@ -283,6 +283,10 @@ class Testing_Env(gym.Env):
         # 返回观测值和环境状态
         return self.single_state, self.trend_state, self.clf_state.reshape(-1), self.reward, self.terminal, {
             "previous_action": action,
+            "final_balance":self.final_balance,
+            "close": current_price_information['close'],
+            "position":self.position
+         
         }
 
     def get_final_return_rate(self, slient=False):

@@ -53,7 +53,8 @@ parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Comp
 parser.add_argument("--beta",type=int,default=5)
 parser.add_argument("--exp",type=str,default="exp1")
 parser.add_argument("--num_step",type=int,default=10)
-parser.add_argument("--load_best_model",type=bool,default=True)
+parser.add_argument("--is_ddp",type=bool,default=False)
+parser.add_argument("--continue_train",type=bool,default=True)
 parser.add_argument('--num_processes', type=int, default=4, help='Number of processes (default: 2)')
 
 def seed_torch(seed,rank):
@@ -166,14 +167,18 @@ class DQN(object):
         self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
         self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
         
-        if args.load_best_model == True:
+        if args.continue_train == True:
             best_model_path = os.path.join("./result/high_level", '{}'.format(self.dataset), 'best_model.pkl')
             if not os.path.exists(best_model_path):
                 self.hyperagent.load_state_dict( torch.load(best_model_path, map_location=self.device))
             
-        
-        self.policy_hyperagent_ddp = DDP(self.hyperagent, device_ids=[0])
-        self.hyperagent_target.load_state_dict(self.policy_hyperagent_ddp.module.state_dict())
+        if args.is_ddp == True:
+            self.policy_hyperagent_ddp = DDP(self.hyperagent, device_ids=[0])
+            
+        else:
+            self.policy_hyperagent_ddp = self.hyperagent_target
+            
+        self.hyperagent_target.load_state_dict(self.hyperagent.state_dict())
         
         self.update_times = args.update_times
         self.optimizer = torch.optim.Adam(self.policy_hyperagent_ddp.parameters(), lr=args.lr)
@@ -729,8 +734,25 @@ class DQN(object):
             dqn_eval.test_cluster(best_model_path, final_result_path)
             
         
-
-            
+    def test(self):
+        best_model_path = os.path.join("./result/high_level", '{}'.format(self.dataset), 'best_model.pkl')
+        dqn_eval = DQN_EVAL(self.n_state_1,
+                                self.n_state_2,
+                                self.n_action,
+                                self.device,
+                                self.clf_list,
+                                self.test_data_path,
+                                self.val_data_path,
+                                self.tech_indicator_list,
+                                self.tech_indicator_list_trend,
+                                self.transcation_cost,
+                                self.back_time_length,
+                                self.max_holding_number,
+                                self.slope_agents,
+                                self.vol_agents
+                                )      
+        final_result_path = os.path.join("./result/high_level", '{}'.format(self.dataset))
+        dqn_eval.test_cluster(best_model_path, final_result_path)
 
     
 from logging import StreamHandler, FileHandler, Formatter
@@ -778,9 +800,19 @@ def main_train(rank,world_size,args):
     agent.train()
     dist.destroy_process_group()
 
+# if __name__ == "__main__":
+#     args = parser.parse_args()
+#     print(args)
+#     world_size = args.num_processes
+     
+#     mp.spawn(main_train, args=(world_size, args), nprocs=world_size, join=True)
+    
+    
+    
+
 if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
-    world_size = args.num_processes
-     
-    mp.spawn(main_train, args=(world_size, args), nprocs=world_size, join=True)
+    world_size = 1
+    agent = DQN(0,world_size,args)
+    agent.test()
