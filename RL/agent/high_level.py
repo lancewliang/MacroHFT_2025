@@ -53,6 +53,7 @@ parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Comp
 parser.add_argument("--beta",type=int,default=5)
 parser.add_argument("--exp",type=str,default="exp1")
 parser.add_argument("--num_step",type=int,default=10)
+parser.add_argument("--load_best_model",type=bool,default=True)
 parser.add_argument('--num_processes', type=int, default=4, help='Number of processes (default: 2)')
 
 def seed_torch(seed,rank):
@@ -165,6 +166,12 @@ class DQN(object):
         self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
         self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
         
+        if args.load_best_model == True:
+            best_model_path = os.path.join("./result/high_level", '{}'.format(self.dataset), 'best_model.pkl')
+            if not os.path.exists(best_model_path):
+                self.hyperagent.load_state_dict( torch.load(best_model_path, map_location=self.device))
+            
+        
         self.policy_hyperagent_ddp = DDP(self.hyperagent, device_ids=[0])
         self.hyperagent_target.load_state_dict(self.policy_hyperagent_ddp.module.state_dict())
         
@@ -220,7 +227,7 @@ class DQN(object):
         
         # 主进程收集所有参数
         if rank == 0:
-            all_params = [[] for _ in range(world_size)]
+            all_params = [[] for _ in range(len(local_params))]
         else:
             all_params = None
         
@@ -535,8 +542,8 @@ class DQN(object):
                         self.writer.add_scalar(tag="q_target", scalar_value=q_target, global_step=self.update_counter, walltime=None)
                  # --- 关键验证2：定期检查所有进程参数是否一致 ---
                 if step_counter % 10 == 0:
-                    self.verify_gradients(self.policy_hyperagent_ddp, self.rank, world_size)
-                    all_params_equal = self.check_parameter_consistency(self.policy_hyperagent_ddp, self.rank, world_size)
+                    self.verify_gradients(self.policy_hyperagent_ddp, self.rank, self.world_size)
+                    all_params_equal = self.check_parameter_consistency(self.policy_hyperagent_ddp, self.rank, self.world_size)
                     if self.rank == 0:
                         log.info(f"step_counter {step_counter}, Parameters consistent: {all_params_equal}")
                 if step_counter > 4320:
