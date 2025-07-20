@@ -19,7 +19,7 @@ from MacroHFT.model.net import *
 # - 提供模型更新后的隐藏状态批量重编码能力
 
 def custom_kernel(h, hi):
-    """
+    """相似性建模
     自定义核函数：计算两个向量之间的平方距离倒数
     
     Args:

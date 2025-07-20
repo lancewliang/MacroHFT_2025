@@ -46,9 +46,9 @@ parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长�
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
-parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient
-parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
-parser.add_argument("--beta",type=int,default=5)
+parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
+parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
+parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--exp",type=str,default="exp1")
 parser.add_argument("--num_step",type=int,default=10)
 
@@ -112,7 +112,7 @@ class DQN(object):
 
         self.tech_indicator_list = np.load('./data/feature_list/single_features.npy', allow_pickle=True).tolist()
         self.tech_indicator_list_trend = np.load('./data/feature_list/trend_features.npy', allow_pickle=True).tolist()
-        self.clf_list = ['slope_360', 'vol_360']
+        self.clf_list = ['slope_360', 'vol_360']  # 趋势  波动 分类
 
         self.transcation_cost = args.transcation_cost
         self.back_time_length = args.back_time_length
@@ -177,10 +177,10 @@ class DQN(object):
         self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, 64, self.device)
 
     def calculate_q(self, w, qs):
-        q_tensor = torch.stack(qs)
-        q_tensor = q_tensor.permute(1, 0, 2)
-        weights_reshaped = w.view(-1, 1, 6)
-        combined_q = torch.bmm(weights_reshaped, q_tensor).squeeze(1)
+        q_tensor = torch.stack(qs)# qs将6个代理的2个动作的权重 [6，2]  => [6,1,2]
+        q_tensor = q_tensor.permute(1, 0, 2) # 重排维度为 [1,6,2]
+        weights_reshaped = w.view(-1, 1, 6) #  超代理评估的6个子代理权重为[1,6], 改变形状为[1，1，6]
+        combined_q = torch.bmm(weights_reshaped, q_tensor).squeeze(1) # 执行批量矩阵乘法[1,1,2]并压缩维度得到最终Q值 [1, 2]
         
         return combined_q
 
@@ -250,7 +250,7 @@ class DQN(object):
             reduction="batchmean",
         )
         # Total loss with weighted components
-        # 加权总损失
+        # 加权总损失，   alpha 代表了记忆的经验权重， beta代表先验q-table权重
         loss = td_error + args.alpha * memory_error + args.beta * KL_loss
         self.optimizer.zero_grad()
         loss.backward()
@@ -300,13 +300,13 @@ class DQN(object):
                     self.vol_agents[2](x1, x2, previous_action)
             ]
             # Calculate hypernetwork output
-            # 计算超网络输出
+            # 计算超网络输出 6个子代理的权重
             w = self.hyperagent(x1, x2, x3, previous_action)
             # Combine Q-values using hypernetwork weights
             # 使用超网络权重组合Q值
             actions_value = self.calculate_q(w, qs)
             # Select action with max Q-value
-            # 选择最大Q值的动作
+            # 选择最大Q值的动作 (根据动作q值，选择动作， max()[1]选择的数组下标,max()[0] q值)
             action = torch.max(actions_value, 1)[1].data.cpu().numpy()
             action = action[0]
         else:
@@ -380,8 +380,9 @@ class DQN(object):
         # Calculate hypernetwork output
         # 计算超网络输出
         w = self.hyperagent(x1, x2, x3, previous_action)
+        # 形状[1,6]， 6个 子网络的权重，
         # Combine Q-values using hypernetwork weights
-        # 使用超网络权重组合Q值
+        # 使用超网络权重组合Q值  
         actions_value = self.calculate_q(w, qs)
         # Return max Q-value as state estimate
         # 返回最大Q值作为状态估计
@@ -503,7 +504,7 @@ class DQN(object):
                         self.writer.add_scalar(tag="q_eval", scalar_value=q_eval, global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_target", scalar_value=q_target, global_step=self.update_counter, walltime=None)
                 if step_counter > 4320:
-                    # 定期重新编码记忆
+                    # 定期重新编码记忆, 因为超代理的隐藏层训练后发生了变化，
                     # Periodically re-encode memory
                     self.memory.re_encode(self.hyperagent)
                 return_margin, pure_balance, required_money, commission_fee = train_env.get_final_return_rate()
@@ -596,7 +597,8 @@ class DQN(object):
         best_return_rate = -float('inf')
         best_model = None
         
-        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather"))
+        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ).head(10000)
+       
         # 初始化经验回放缓冲区
         # Initialize replay buffer for experience storage
         self.replay_buffer = ReplayBuffer_High(args, self.n_state_1, self.n_state_2, self.n_action) 

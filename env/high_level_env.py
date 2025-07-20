@@ -154,7 +154,7 @@ class Testing_Env(gym.Env):
         # 构建初始状态向量
         self.single_state = self.data[self.tech_indicator_list].values # 技术指标状态
         self.trend_state = self.data[self.tech_indicator_list_trend].values # 趋势特征状态
-        self.clf_state = self.data[self.clf_list].values
+        self.clf_state = self.data[self.clf_list].values  ##分类特征状态
         # 重置奖励记录
         self.initial_reward = 0
         self.reward_history = [self.initial_reward]
