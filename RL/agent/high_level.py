@@ -757,7 +757,7 @@ class DQN(object):
         最大回撤:{required_money:.2f},
         胜率:{win_rate:.2f},
         盈亏比:{profit_loss_ratio:.2f},
-        交易次数:{total_trades:.2f},
+        交易总次数:{total_trades:.2f},
         交易频率:{trade_frequency:.2f},
         手续费:{commission_fee:.2f}
         """

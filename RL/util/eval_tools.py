@@ -1,6 +1,7 @@
 from collections import deque
 import pandas as pd
 import numpy as np
+import logging as log
 def _generate_trade_profit_loss_records(trade_records):
     """
     生成交易盈亏记录
@@ -98,7 +99,7 @@ def profit_loss_statistics(trade_records):
             - loss_amount: 亏损金额
     """
     # 获取交易盈亏记录
-    profit_loss_records = generate_trade_profit_loss_records(trade_records)
+    profit_loss_records = _generate_trade_profit_loss_records(trade_records)
     
     if profit_loss_records.empty:
         # 如果没有交易记录，返回空的DataFrame
@@ -156,6 +157,7 @@ def calculate_trading_metrics(trade_records):
     基于交易记录计算以下指标：
     - 总交易金额
     - 年化波动率 = 每日收益率标准差
+    - 下行标准差 = 低于目标收益率的波动性
     - 交易胜率 = 盈利次数/总交易次数
     - 盈亏比 = 平均每次盈利金额/平均每次亏损金额
     - 总交易次数
@@ -165,6 +167,7 @@ def calculate_trading_metrics(trade_records):
         dict: 包含计算指标的字典
             - total_amount: 总交易金额
             - annualized_volatility: 年化波动率
+            - downside_deviation: 下行标准差
             - win_rate: 交易胜率
             - profit_loss_ratio: 盈亏比
             - total_trades: 总交易次数
@@ -178,12 +181,14 @@ def calculate_trading_metrics(trade_records):
         return {
             'total_amount': 0,
             'annualized_volatility': 0,
+            'downside_deviation': 0,
             'win_rate': 0,
             'profit_loss_ratio': 0,
             'total_trades': 0,
             'trade_frequency': 0
         }
-    
+    log.info(profit_loss_records.head(10))
+    log.info(profit_loss_records.tail(10))
     # 转换datetime列为datetime类型
     profit_loss_records['datetime'] = pd.to_datetime(profit_loss_records['datetime'])
     
@@ -205,6 +210,9 @@ def calculate_trading_metrics(trade_records):
     # 计算年化波动率 = 每日收益率标准差
     daily_std = daily_returns['daily_return'].std()
     annualized_volatility = daily_std if not np.isnan(daily_std) else 0
+    
+    # 计算下行标准差
+    downside_deviation = _calculate_downside_deviation(daily_returns['daily_return'])
     
     # 计算交易胜率 = 盈利次数 / 总交易次数
     profit_loss_records['is_profit'] = profit_loss_records['profit_loss'] > 0
@@ -230,8 +238,37 @@ def calculate_trading_metrics(trade_records):
     return {
         'total_amount': total_amount,
         'annualized_volatility': annualized_volatility,
+        'downside_deviation': downside_deviation,
         'win_rate': win_rate,
         'profit_loss_ratio': profit_loss_ratio,
         'total_trades': total_trades,
         'trade_frequency': trade_frequency
     }
+
+def _calculate_downside_deviation(returns, target_return=0):
+    """
+    计算下行标准差
+    
+    下行标准差是一种风险度量指标，只考虑低于目标收益率的波动性。
+    
+    参数:
+        returns (pd.Series or np.array): 收益率序列
+        target_return (float): 目标收益率，默认为0
+        
+    返回:
+        float: 下行标准差
+    """
+    # 确保输入是numpy数组
+    returns = np.array(returns)
+    
+    # 计算低于目标收益率的部分
+    downside_returns = returns[returns < target_return] - target_return
+    
+    # 如果没有低于目标收益率的值，返回0
+    if len(downside_returns) == 0:
+        return 0
+    
+    # 计算下行标准差
+    downside_deviation = np.sqrt(np.mean(downside_returns ** 2))
+    
+    return downside_deviation
