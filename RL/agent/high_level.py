@@ -33,7 +33,7 @@ parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
-parser.add_argument("--eval_update_freq",type=int,default=1024)  # 网络更新频率 / Network update frequency
+parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
@@ -47,7 +47,7 @@ parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random se
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
-parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
+parser.add_argument("--device",type=str,default="cpu")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--exp",type=str,default="exp1")
 parser.add_argument("--num_step",type=int,default=10)
@@ -513,10 +513,8 @@ class DQN(object):
                     # 定期重新编码记忆, 因为超代理的隐藏层训练后发生了变化，
                     # Periodically re-encode memory
                     self.memory.re_encode(self.hyperagent)
-                return_margin, pure_balance, required_money, commission_fee = train_env.get_final_return_rate()
-                final_balance = pure_balance + train_env.calculate_value(next_info['previous_price_information'], train_env.position)
-                portfit_margine = final_balance / required_money
-                log.info(f"update network {step_counter} return_margin:{return_margin:.2f},portfit_margine:{portfit_margine:.2f},final_balance:{final_balance:.2f},pure_balance:{pure_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
+                return_margin, final_balance, required_money, commission_fee = train_env.get_final_return_rate()                
+                log.info(f"update network {step_counter} return_margin:{return_margin:.2f},final_balance:{final_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
             
             if done:
                 log.info(f" train_env step done")
@@ -603,8 +601,8 @@ class DQN(object):
         best_return_rate = -float('inf')
         best_model = None
         
-        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ).head(100000)
-       
+        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) 
+        log.info(f"train data length: {len(self.df)}")
         # 初始化经验回放缓冲区
         # Initialize replay buffer for experience storage
         self.replay_buffer = ReplayBuffer_High(args, self.n_state_1, self.n_state_2, self.n_action) 
@@ -687,10 +685,9 @@ class DQN(object):
             reward_list_episode.append(r)
             s, s2, s3, info = s_, s2_, s3_, info_
             action_list_episode.append(a)
-        return_margin, pure_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
-        final_balance = pure_balance + val_env.calculate_value(info_['previous_price_information'], val_env.position)
-        portfit_margine = final_balance / required_money
-        log.info(f"val return_margin:{return_margin:.2f},portfit_margine:{portfit_margine:.2f},final_balance:{final_balance:.2f},pure_balance:{pure_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
+        return_margin, final_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
+          
+        log.info(f"val return_margin:{return_margin:.2f},final_balance:{final_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
      
         
         final_balance = val_env.final_balance
@@ -713,8 +710,7 @@ class DQN(object):
         return return_rate
 
     def test_cluster(self, epoch_path, save_path):
-        self.hyperagent.load_state_dict(
-            torch.load(os.path.join(epoch_path, "trained_model.pkl")))
+        self.hyperagent.load_state_dict(torch.load(epoch_path))
         self.hyperagent.eval()
         counter = False
         action_list = []
@@ -723,7 +719,8 @@ class DQN(object):
         required_money_list = []
         commission_fee_list = []
         self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather"))
-        
+        log.info(self.df.head(10))
+        log.info(self.df.tail(10))
         test_env = Testing_Env(
                 df=self.df,
                 tech_indicator_list=self.tech_indicator_list,
@@ -743,10 +740,8 @@ class DQN(object):
             reward_list_episode.append(r)
             s, s2, s3, info = s_, s2_, s3_, info_
             action_list_episode.append(a)
-        return_margin, pure_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)    
-        final_balance = pure_balance + test_env.calculate_value(info_['previous_price_information'], test_env.position)
-        portfit_margine = final_balance / required_money
-        log.info(f"val return_margin:{return_margin:.2f},portfit_margine:{portfit_margine:.2f},final_balance:{final_balance:.2f},pure_balance:{pure_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
+        return_margin, final_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)            
+        log.info(f"test return_margin 风险调整收益率:{return_margin:.2f},final_balance 计算总净收益:{final_balance:.2f}, required_money最大资金需求（资金曲线最低点绝对值）:{required_money:.2f},commission_fee累计交易手续费:{commission_fee:.2f}")
          
         
         final_balance = test_env.final_balance
@@ -802,4 +797,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
     agent = DQN(args)
-    agent.train()
+    # agent.train()
+    final_result_path = os.path.join("./result/high_level", '{}'.format(agent.dataset))
+    best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), 'best_model.pkl')
+    agent.test_cluster(best_model_path, final_result_path)
