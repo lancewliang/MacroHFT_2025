@@ -234,11 +234,27 @@ class Testing_Env(gym.Env):
             self.sell_size = previous_position - position
             # 计算卖出收入（扣除手续费）
             cash = self.sell_size * previous_price_information['close'] * (1 - self.comission_fee)
-            self.comission_fee_history.append(self.comission_fee * self.sell_size * previous_price_information['close']) # 记录交易成本
+            commission_fee_amount = self.comission_fee * self.sell_size * previous_price_information['close']
+            self.comission_fee_history.append(commission_fee_amount) # 记录交易成本
             # 更新资金记录
             self.sell_money_memory.append(cash) # 卖出收入
             self.needed_money_memory.append(0) # 买入支出
             self.position = position
+            
+            # 记录交易信息
+            if self.sell_size > 0:  # 只有实际发生交易时才记录
+                trade_record = {
+                    'id': self.trade_id_counter,
+                    'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
+                    'amount': cash,
+                    'quantity': self.sell_size,
+                    'type': 'sell',
+                    'commission_fee': commission_fee_amount,
+                    'price': previous_price_information['close']
+                }
+                self.trade_records.append(trade_record)
+                self.trade_id_counter += 1
+            
             # 计算持仓价值变化
             previous_value = self.calculate_value(previous_price_information, self.previous_position)
             current_value = self.calculate_value(current_price_information, self.position)
@@ -257,12 +273,28 @@ class Testing_Env(gym.Env):
             self.buy_size = position - previous_position # 计算买入数量
             # 计算买入所需资金（包含手续费）
             needed_cash = self.buy_size * previous_price_information['close'] * (1 + self.comission_fee)
-            self.comission_fee_history.append(self.comission_fee * self.buy_size * previous_price_information['close']) # 记录交易成本
+            commission_fee_amount = self.comission_fee * self.buy_size * previous_price_information['close']
+            self.comission_fee_history.append(commission_fee_amount) # 记录交易成本
             # 更新资金记录
             self.needed_money_memory.append(needed_cash)  # 买入支出
             self.sell_money_memory.append(0) # 卖出收入
 
             self.position = position
+            
+            # 记录交易信息
+            if self.buy_size > 0:  # 只有实际发生交易时才记录
+                trade_record = {
+                    'id': self.trade_id_counter,
+                    'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
+                    'amount': needed_cash,
+                    'quantity': self.buy_size,
+                    'type': 'buy',
+                    'commission_fee': commission_fee_amount,
+                    'price': previous_price_information['close']
+                }
+                self.trade_records.append(trade_record)
+                self.trade_id_counter += 1
+            
             # 计算持仓价值变化
             previous_value = self.calculate_value(previous_price_information, self.previous_position)
             current_value = self.calculate_value(current_price_information, self.position)
@@ -281,9 +313,24 @@ class Testing_Env(gym.Env):
             if self.position > 0:
                 self.sell_size = self.position
                 cash = self.sell_size * current_price_information['close'] * (1 - self.comission_fee)
-                self.comission_fee_history.append(self.comission_fee * self.sell_size * current_price_information['close'])
+                commission_fee_amount = self.comission_fee * self.sell_size * current_price_information['close']
+                self.comission_fee_history.append(commission_fee_amount)
                 self.sell_money_memory.append(cash)
                 self.needed_money_memory.append(0)
+                
+                # 记录交易信息
+                trade_record = {
+                    'id': self.trade_id_counter,
+                    'datetime': current_price_information['timestamp'],  # 使用date作为交易时间
+                    'amount': cash,
+                    'quantity': self.sell_size,
+                    'type': 'sell',
+                    'commission_fee': commission_fee_amount,
+                    'price': current_price_information['close']
+                }
+                self.trade_records.append(trade_record)
+                self.trade_id_counter += 1
+                
                 self.position = 0
             
             # 终止时计算最终收益

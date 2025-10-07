@@ -22,7 +22,7 @@ from env.high_level_env import Testing_Env, Training_Env
 from RL.util.utili import get_ada, get_epsilon, LinearDecaySchedule
 from RL.util.replay_buffer import ReplayBuffer_High
 from RL.util.memory import episodicmemory
-
+from RL.util.eval_tools import profit_loss_statistics,calculate_trading_metrics
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -740,9 +740,28 @@ class DQN(object):
             reward_list_episode.append(r)
             s, s2, s3, info = s_, s2_, s3_, info_
             action_list_episode.append(a)
-        return_margin, final_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)            
-        log.info(f"test return_margin 风险调整收益率:{return_margin:.2f},final_balance 计算总净收益:{final_balance:.2f}, required_money最大资金需求（资金曲线最低点绝对值）:{required_money:.2f},commission_fee累计交易手续费:{commission_fee:.2f}")
-         
+        return_margin, final_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)    
+        metrics = calculate_trading_metrics(test_env.trade_records) 
+        total_amount= metrics['total_amount'] #总交易金额
+        annualized_volatility = metrics['annualized_volatility'] #年化波动率
+        win_rate = metrics['win_rate'] #胜率
+        profit_loss_ratio = metrics['profit_loss_ratio'] #盈亏比
+        total_trades = metrics['total_trades'] #总交易次数
+        trade_frequency = metrics['trade_frequency'] #交易频率
+        
+        log_metrics_string = f"""
+        累计收益率:{return_margin:.2f},
+        总交易金额:{total_amount:.2f},
+        累积净收益:{final_balance:.2f},
+        年化波动率:{annualized_volatility:.2f},
+        最大回撤:{required_money:.2f},
+        胜率:{win_rate:.2f},
+        盈亏比:{profit_loss_ratio:.2f},
+        交易次数:{total_trades:.2f},
+        交易频率:{trade_frequency:.2f},
+        手续费:{commission_fee:.2f}
+        """
+        log.info(log_metrics_string)
         
         final_balance = test_env.final_balance
         action_list.append(action_list_episode)
