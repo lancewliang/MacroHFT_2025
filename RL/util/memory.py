@@ -9,7 +9,7 @@ import sys
 ROOT = str(pathlib.Path(__file__).resolve().parents[3])
 sys.path.append(ROOT)
 sys.path.insert(0, ".")
-from MacroHFT.model.net import *
+from model.net import *
 
 # episodicmemory.py
 # 功能说明：实现基于隐藏状态的表记忆模块，支持核方法查询和在线重编码功能
@@ -18,7 +18,21 @@ from MacroHFT.model.net import *
 # - 支持top-k最近邻Q值加权查询
 # - 提供模型更新后的隐藏状态批量重编码能力
 
-def custom_kernel(h, hi):
+# def custom_kernel(h, hi):
+#     """相似性建模
+#     自定义核函数：计算两个向量之间的平方距离倒数
+    
+#     Args:
+#         h (np.array): 当前向量
+#         hi (np.array): 比较向量
+    
+#     Returns:
+#         float: 相似度得分
+#     """
+#     squared_distance = np.sum((h - hi) ** 2)
+#     return 1 / (squared_distance + 1e-3)
+
+def custom_kernel(query_hidden_state, hidden_states):
     """相似性建模
     自定义核函数：计算两个向量之间的平方距离倒数
     
@@ -29,8 +43,9 @@ def custom_kernel(h, hi):
     Returns:
         float: 相似度得分
     """
-    squared_distance = np.sum((h - hi) ** 2)
-    return 1 / (squared_distance + 1e-3)
+    # 使用向量化操作计算所有核函数值
+    squared_distances = np.sum((hidden_states - query_hidden_state) ** 2, axis=1)
+    return 1 / (squared_distances + 1e-3)
 
 class episodicmemory():
     def __init__(self, capacity, k, state_dim, state_dim_2, hidden_dim, device):
@@ -94,7 +109,10 @@ class episodicmemory():
             weighted_q_value = np.nan
         else:
             # 计算所有样本的核函数值
-            kernel_values = np.array([custom_kernel(query_hidden_state, hs) for hs in self.buffer["hidden_state"]])
+            #kernel_values = np.array([custom_kernel(query_hidden_state, hs) for hs in self.buffer["hidden_state"]])
+            kernel_values = custom_kernel(query_hidden_state, self.buffer["hidden_state"])
+            
+            
             # 获取top-k索引
             top_k_indices = np.argsort(kernel_values)[-self.k:]
             # 获取top-k数据

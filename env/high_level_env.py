@@ -120,6 +120,9 @@ class Testing_Env(gym.Env):
         self.sell_money_memory = []
         self.comission_fee_history = []
         self.position = 0
+        # 添加交易记录成员变量
+        self.trade_records = []  # 记录所有买卖记录
+        self.trade_id_counter = 0  # 交易ID计数器
 
 
 
@@ -167,6 +170,9 @@ class Testing_Env(gym.Env):
         self.needed_money_memory = []  # 清空买入资金记录
         self.sell_money_memory = []  # 清空卖出资金记录
         self.comission_fee_history = []  # 清空手续费记录
+        # 重置交易记录
+        self.trade_records = []  # 清空交易记录
+        self.trade_id_counter = 0  # 重置交易ID计数器
         # 设置初始持仓（根据初始动作参数）
         self.previous_position = self.initial_action * self.max_holding_number
         self.position = self.initial_action * self.max_holding_number
@@ -271,10 +277,20 @@ class Testing_Env(gym.Env):
         self.previous_position = self.position
 
         if self.terminal:
+            #应该把手上的仓位全部平掉
+            if self.position > 0:
+                self.sell_size = self.position
+                cash = self.sell_size * current_price_information['close'] * (1 - self.comission_fee)
+                self.comission_fee_history.append(self.comission_fee * self.sell_size * current_price_information['close'])
+                self.sell_money_memory.append(cash)
+                self.needed_money_memory.append(0)
+                self.position = 0
+            
             # 终止时计算最终收益
             return_margin, pure_balance, required_money, commission_fee = self.get_final_return_rate()
             self.pured_balance = pure_balance
-            self.final_balance = self.pured_balance + self.calculate_value(current_price_information, self.position)
+            self.final_balance = self.pured_balance 
+            # self.final_balance = self.pured_balance + self.calculate_value(current_price_information, self.position)
             self.required_money = required_money
             
             portfit_margine = self.final_balance / self.required_money
@@ -309,9 +325,10 @@ class Testing_Env(gym.Env):
         final_balance = np.sum(true_money)
         balance_list = []
         # 创建资金曲线（余额变化序列），用于分析资金波动情况
-        for i in range(len(true_money)):
-            # 累计计算每个时间点的余额
-            balance_list.append(np.sum(true_money[:i + 1]))
+        # for i in range(len(true_money)):
+        #     # 累计计算每个时间点的余额
+        #     balance_list.append(np.sum(true_money[:i + 1]))
+        balance_list = np.cumsum(true_money)
         # 计算最大资金需求（历史最低余额的绝对值） （风险度量指标） 
         required_money = -np.min(balance_list)
         # 计算总手续费（注意：字段名存在拼写错误 comission -> commission）
@@ -413,5 +430,3 @@ class Training_Env(Testing_Env):
         # 更新 Q 值信息（基于当前时间步和动作）
         info['q_value'] = self.q_table[self.m - 1][action][:]
         return single_state, trend_state, clf_state.reshape(-1), reward, done, info
-
-

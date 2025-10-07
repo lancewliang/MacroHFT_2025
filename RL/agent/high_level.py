@@ -31,9 +31,9 @@ os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
-parser.add_argument("--q_value_memorize_freq",type=int, default=10)  # Q值记忆频率 / Q-value logging frequency
+parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
-parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
+parser.add_argument("--eval_update_freq",type=int,default=1024)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
@@ -464,29 +464,35 @@ class DQN(object):
             # 执行环境步进操作
             # Execute environment step
             next_single_state, next_trend_state, next_clf_state, reward, done, next_info = train_env.step(action)
-            # 计算隐藏状态
-            # Calculate hidden state
-            hs = self.calculate_hidden(single_state, trend_state, info)
-            # 计算目标Q值
-            # Calculate target Q-value
-            q = reward + self.gamma * (1 - done) * self.q_estimate(next_single_state, next_trend_state, next_clf_state, next_info)
-            # 查询记忆库中的Q值
-            # Query Q-value from memory
-            q_memory = self.memory.query(hs, action)
-            if np.isnan(q_memory):
-                q_memory = q
             # 获取历史动作信息
             # Get historical action information
             previous_action = info['previous_action']
             demo_action = info['q_value']
             next_previous_action = next_info['previous_action']
             next_demo_action = next_info['q_value']
+            
+            
+            # 计算隐藏状态
+            # Calculate hidden state
+            hs = self.calculate_hidden(single_state, trend_state, info)
+            # 查询记忆库中的Q值
+            # Query Q-value from memory
+            q_memory = self.memory.query(hs, action)
+            # 计算目标Q值
+            # Calculate target Q-value
+            q = reward + self.gamma * (1 - done) * self.q_estimate(next_single_state, next_trend_state, next_clf_state, next_info)
+            
+            if np.isnan(q_memory):
+                q_memory = q
+            # 更新记忆库
+            # Update memory            
+            self.memory.add(hs, action, q, single_state, trend_state, previous_action)
+
             # 存储经验到回放缓冲区
             # Store transition in replay buffer
             self.replay_buffer.store_transition(single_state, trend_state, clf_state, previous_action, demo_action, action, reward, next_single_state, next_trend_state, next_clf_state, next_previous_action, next_demo_action, done, q_memory)
-            # 更新记忆库
-            # Update memory
-            self.memory.add(hs, action, q, single_state, trend_state, previous_action)
+
+
             episode_reward_sum += reward
 
             single_state, trend_state, clf_state, info = next_single_state, next_trend_state, next_clf_state, next_info
@@ -597,7 +603,7 @@ class DQN(object):
         best_return_rate = -float('inf')
         best_model = None
         
-        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ).head(10000)
+        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ).head(100000)
        
         # 初始化经验回放缓冲区
         # Initialize replay buffer for experience storage
