@@ -788,12 +788,16 @@ class DQN(object):
         reward_list = np.array(reward_list)
         final_balance_list = np.array(final_balance_list)
         required_money_list = np.array(required_money_list)
-        commission_fee_list = np.array(commission_fee_list)
+        commission_fee_list = np.array(commission_fee_list)         
+        
         np.save(os.path.join(save_path, "action.npy"), action_list)
         np.save(os.path.join(save_path, "reward.npy"), reward_list)
         np.save(os.path.join(save_path, "final_balance.npy"), final_balance_list)
         np.save(os.path.join(save_path, "require_money.npy"), required_money_list)
         np.save(os.path.join(save_path, "commission_fee_history.npy"), commission_fee_list)
+        
+        np.save(os.path.join(save_path, "trade_records.npy"), np.array(test_env.trade_records))
+        np.save(os.path.join(save_path, "money_history.npy"), np.array(test_env.money_history))
             
 
     

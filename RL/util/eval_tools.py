@@ -2,6 +2,8 @@ from collections import deque
 import pandas as pd
 import numpy as np
 import logging as log
+import statsmodels.api as sm
+
 def _generate_trade_profit_loss_records(trade_records):
     """
     生成交易盈亏记录
@@ -498,7 +500,7 @@ def _calculate_alpha_beta(monthly_returns_history, monthly_market_baseline_retur
     计算策略的alpha和beta
     
     基于策略月度收益率、市场基准月度收益率和无风险月度收益率，
-    计算策略的alpha和beta指标。
+    使用线性回归方法计算策略的alpha和beta指标。
     
     参数:
         monthly_returns_history: 策略月度收益率列表
@@ -506,16 +508,13 @@ def _calculate_alpha_beta(monthly_returns_history, monthly_market_baseline_retur
         monthly_no_risk_returns: 无风险月度收益率Series
     
     返回:
-        dict: 包含alpha和beta的字典
+        tuple: (alpha, beta)
             - alpha: 策略alpha值
             - beta: 策略beta值
     """
     # 确保有足够的数据进行计算
     if len(monthly_returns_history) < 2 or len(monthly_market_baseline_returns) < 2:
-        return {
-            'alpha': 0,
-            'beta': 0
-        }
+        return 0, 0
     
     # 将策略收益率转换为numpy数组
     strategy_returns = np.array(monthly_returns_history)
@@ -531,16 +530,40 @@ def _calculate_alpha_beta(monthly_returns_history, monthly_market_baseline_retur
     # 计算市场超额收益率（市场收益率 - 无风险收益率）
     market_excess_returns = market_returns - risk_free_returns
     
-    # 计算beta
-    # beta = 协方差(策略超额收益率, 市场超额收益率) / 方差(市场超额收益率)
-    if np.var(market_excess_returns) != 0:
-        covariance = np.cov(strategy_excess_returns, market_excess_returns)[0, 1]
-        beta = covariance / np.var(market_excess_returns)
-    else:
-        beta = 0
+    # 创建DataFrame以便于处理
+    df = pd.DataFrame({
+        'strategy_return': strategy_returns,
+        'market_return': market_returns,
+        'risk_free': risk_free_returns,
+        'strategy_excess': strategy_excess_returns,
+        'market_excess': market_excess_returns
+    })
     
-    # 计算alpha
-    # alpha = 平均策略超额收益率 - beta * 平均市场超额收益率
-    alpha = np.mean(strategy_excess_returns) - beta * np.mean(market_excess_returns)
+    # 进行线性回归
+    # 添加常数项（对应Alpha）
+    X = sm.add_constant(df['market_excess'])
+    y = df['strategy_excess']
     
-    return alpha, beta
+    try:
+        model = sm.OLS(y, X).fit()
+        
+        # 提取Alpha和Beta
+        alpha = model.params['const']
+        beta = model.params['market_excess']
+        
+        return alpha, beta
+    except:
+        # 如果回归失败，回退到原来的计算方法
+        # 计算beta
+        # beta = 协方差(策略超额收益率, 市场超额收益率) / 方差(市场超额收益率)
+        if np.var(market_excess_returns) != 0:
+            covariance = np.cov(strategy_excess_returns, market_excess_returns)[0, 1]
+            beta = covariance / np.var(market_excess_returns)
+        else:
+            beta = 0
+        
+        # 计算alpha
+        # alpha = 平均策略超额收益率 - beta * 平均市场超额收益率
+        alpha = np.mean(strategy_excess_returns) - beta * np.mean(market_excess_returns)
+        
+        return alpha, beta
