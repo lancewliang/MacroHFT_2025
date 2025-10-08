@@ -22,7 +22,7 @@ from env.high_level_env import Testing_Env, Training_Env
 from RL.util.utili import get_ada, get_epsilon, LinearDecaySchedule
 from RL.util.replay_buffer import ReplayBuffer_High
 from RL.util.memory import episodicmemory
-from RL.util.eval_tools import profit_loss_statistics,calculate_trading_metrics
+from RL.util.eval_tools import calculate_trading_metrics
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -49,6 +49,7 @@ parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / T
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--device",type=str,default="cpu")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
+parser.add_argument("--no_risk_return",type=float,default=4.5) #无风险返回率
 parser.add_argument("--exp",type=str,default="exp1")
 parser.add_argument("--num_step",type=int,default=10)
 
@@ -175,6 +176,8 @@ class DQN(object):
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
         self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, 64, self.device)
+        self.no_risk_return = args.no_risk_return
+
 
     def calculate_q(self, w, qs):
         q_tensor = torch.stack(qs)# qs将6个代理的2个动作的权重 [6，2]  => [6,1,2]
@@ -452,6 +455,7 @@ class DQN(object):
                 transcation_cost=self.transcation_cost,
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
+                n_action = self.n_action,
                 initial_action=random.choices(range(self.n_action), k=1)[0],
                 alpha = 0)
         single_state, trend_state, clf_state, info = train_env.reset()
@@ -674,7 +678,8 @@ class DQN(object):
                 transcation_cost=self.transcation_cost,
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
-                initial_action=0)
+                initial_action=0,
+                n_action = self.n_action)
         s, s2, s3, info = val_env.reset()
         done = False
         action_list_episode = []
@@ -721,6 +726,7 @@ class DQN(object):
         self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather"))
         log.info(self.df.head(10))
         log.info(self.df.tail(10))
+        log.info(len(self.df))
         test_env = Testing_Env(
                 df=self.df,
                 tech_indicator_list=self.tech_indicator_list,
@@ -729,7 +735,8 @@ class DQN(object):
                 transcation_cost=self.transcation_cost,
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
-                initial_action=0)
+                initial_action=0,
+                n_action = self.n_action)
         s, s2, s3, info = test_env.reset()
         done = False
         action_list_episode = []
@@ -741,24 +748,31 @@ class DQN(object):
             s, s2, s3, info = s_, s2_, s3_, info_
             action_list_episode.append(a)
         return_margin, final_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)    
-        metrics = calculate_trading_metrics(test_env.trade_records) 
+        metrics = calculate_trading_metrics(self.df,test_env.trade_records, test_env.money_history, self.no_risk_return) 
+      
         total_amount= metrics['total_amount'] #总交易金额
         annualized_volatility = metrics['annualized_volatility'] #年化波动率
         win_rate = metrics['win_rate'] #胜率
         profit_loss_ratio = metrics['profit_loss_ratio'] #盈亏比
         total_trades = metrics['total_trades'] #总交易次数
         trade_frequency = metrics['trade_frequency'] #交易频率
+        downside_deviation = metrics['downside_deviation'] #下行标准差
+        alpha = metrics['alpha'] #alpha
+        beta = metrics['beta'] #beta
         
         log_metrics_string = f"""
         累计收益率:{return_margin:.2f},
         总交易金额:{total_amount:.2f},
         累积净收益:{final_balance:.2f},
-        年化波动率:{annualized_volatility:.2f},
+        年化波动率:{annualized_volatility:.4f},
         最大回撤:{required_money:.2f},
         胜率:{win_rate:.2f},
         盈亏比:{profit_loss_ratio:.2f},
         交易总次数:{total_trades:.2f},
         交易频率:{trade_frequency:.2f},
+        下行标准差:{downside_deviation:.4f},
+        alpha:{alpha:.4f},
+        beta:{beta:.4f},
         手续费:{commission_fee:.2f}
         """
         log.info(log_metrics_string)

@@ -83,6 +83,7 @@ class Testing_Env(gym.Env):
         back_time_length=back_time_length,  #状态回溯时间步长
         max_holding_number=max_holding_number,  #最大持仓量
         initial_action=0,
+        n_action=2,
     ):
         # 初始化交易环境参数
         # df: 原始金融数据DataFrame
@@ -111,6 +112,7 @@ class Testing_Env(gym.Env):
         self.data = self.df.iloc[self.m - self.stack_length:self.m]
         self.single_state = self.data[self.tech_indicator_list].values  # 技术指标状态
         self.trend_state = self.data[self.tech_indicator_list_trend].values # 趋势特征状态
+        
         self.initial_reward = 0
         self.reward_history = [self.initial_reward]
         self.previous_action = 0
@@ -124,6 +126,10 @@ class Testing_Env(gym.Env):
         self.trade_records = []  # 记录所有买卖记录
         self.trade_id_counter = 0  # 交易ID计数器
 
+        # 资金记录         
+        self.initial_money = (self.data["open"].iloc[0] * self.max_holding_number * (n_action -1)) * 1.1
+        self.current_money = self.initial_money
+        self.money_history = []
 
 
     def calculate_value(self, price_information, position):
@@ -158,8 +164,14 @@ class Testing_Env(gym.Env):
         self.single_state = self.data[self.tech_indicator_list].values # 技术指标状态
         self.trend_state = self.data[self.tech_indicator_list_trend].values # 趋势特征状态
         self.clf_state = self.data[self.clf_list].values  ##分类特征状态
+        # 资金记录
+        if self.initial_money == 0 :            
+            self.initial_money = self.data["open"].iloc[0] * self.max_holding_number
+        self.current_money = self.initial_money
+        self.money_history = []
         # 重置奖励记录
         self.initial_reward = 0
+
         self.reward_history = [self.initial_reward]
         # 重置动作记录
         self.previous_action = 0
@@ -170,12 +182,15 @@ class Testing_Env(gym.Env):
         self.needed_money_memory = []  # 清空买入资金记录
         self.sell_money_memory = []  # 清空卖出资金记录
         self.comission_fee_history = []  # 清空手续费记录
+
         # 重置交易记录
         self.trade_records = []  # 清空交易记录
         self.trade_id_counter = 0  # 重置交易ID计数器
         # 设置初始持仓（根据初始动作参数）
         self.previous_position = self.initial_action * self.max_holding_number
         self.position = self.initial_action * self.max_holding_number
+
+        
         
         # 返回初始观测值和动作信息
         return self.single_state, self.trend_state, self.clf_state.reshape(-1), {
@@ -240,6 +255,7 @@ class Testing_Env(gym.Env):
             self.sell_money_memory.append(cash) # 卖出收入
             self.needed_money_memory.append(0) # 买入支出
             self.position = position
+            self.current_money = self.current_money + cash
             
             # 记录交易信息
             if self.sell_size > 0:  # 只有实际发生交易时才记录
@@ -260,13 +276,8 @@ class Testing_Env(gym.Env):
             current_value = self.calculate_value(current_price_information, self.position)
             # 卖出奖励计算：当前价值 + 现金流入 - 上一时刻价值
             self.reward = current_value + cash - previous_value
-            if previous_value == 0:
-                return_rate = 0
-            else:
-                return_rate = (current_value + cash - previous_value) / previous_value
-            # 保存指标
-            self.return_rate = return_rate
             self.reward_history.append(self.reward)
+
 
         if previous_position < position:
             # 处理买入操作
@@ -278,7 +289,7 @@ class Testing_Env(gym.Env):
             # 更新资金记录
             self.needed_money_memory.append(needed_cash)  # 买入支出
             self.sell_money_memory.append(0) # 卖出收入
-
+            self.current_money = self.current_money - needed_cash
             self.position = position
             
             # 记录交易信息
@@ -300,13 +311,13 @@ class Testing_Env(gym.Env):
             current_value = self.calculate_value(current_price_information, self.position)
             # 买入奖励计算：当前价值 - 所需现金 - 上一时刻价值
             self.reward = current_value - needed_cash - previous_value
-            return_rate = (current_value - needed_cash - previous_value) / (previous_value + needed_cash)
             # 保存指标
             self.reward_history.append(self.reward)
-            self.return_rate = return_rate
+
             
         # 更新持仓记录
-        self.previous_position = self.position
+        self.previous_position = self.position 
+
 
         if self.terminal:
             #应该把手上的仓位全部平掉
@@ -317,6 +328,7 @@ class Testing_Env(gym.Env):
                 self.comission_fee_history.append(commission_fee_amount)
                 self.sell_money_memory.append(cash)
                 self.needed_money_memory.append(0)
+                self.current_money = self.current_money + cash
                 
                 # 记录交易信息
                 trade_record = {
@@ -329,10 +341,9 @@ class Testing_Env(gym.Env):
                     'price': current_price_information['close']
                 }
                 self.trade_records.append(trade_record)
-                self.trade_id_counter += 1
-                
+                self.trade_id_counter += 1                
                 self.position = 0
-            
+
             # 终止时计算最终收益
             return_margin, pure_balance, required_money, commission_fee = self.get_final_return_rate()
             self.pured_balance = pure_balance
@@ -343,6 +354,8 @@ class Testing_Env(gym.Env):
             portfit_margine = self.final_balance / self.required_money
             log.info(f"terminal the portfit return_margin:{return_margin:.2f},portfit_margine:{portfit_margine:.2f},final_balance:{self.final_balance:.2f},pure_balance:{pure_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
             
+        
+        self.money_history.append([current_price_information['timestamp'], self.current_money]) 
         # 返回观测值和环境状态
         return self.single_state, self.trend_state, self.clf_state.reshape(-1), self.reward, self.terminal, {
             "previous_action": action,
@@ -368,6 +381,8 @@ class Testing_Env(gym.Env):
         needed_money_memory = np.array(self.needed_money_memory)
         # 计算每笔交易的真实收益（卖出收入 - 买入支出）
         true_money = sell_money_memory - needed_money_memory
+        non_zero_mask = true_money != 0
+        true_money = true_money[non_zero_mask]
         # 计算总净收益
         final_balance = np.sum(true_money)
         balance_list = []
