@@ -22,10 +22,10 @@ def test_plot_money_curve():
     
     save_path = os.path.join("/home/lance/quant/aiwork/MacroHFT/result/high_level/ETHUSDT")
     trade_records = np.load(os.path.join(save_path, "trade_records.npy"), allow_pickle=True)
-    money_history = np.load(os.path.join(save_path, "money_history.npy"), allow_pickle=True)
+    value_history = np.load(os.path.join(save_path, "value_history.npy"), allow_pickle=True)
     
     # 调用绘图函数
-    plot_money_curve(trade_records, money_history, df, save_path)
+    plot_money_curve(trade_records, value_history, df, save_path)
     
     # 保存图表
     # plt.savefig(os.path.join("/home/lance/quant/aiwork/MacroHFT/test", "money_curve.png"))

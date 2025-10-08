@@ -23,6 +23,10 @@ from RL.util.utili import get_ada, get_epsilon, LinearDecaySchedule
 from RL.util.replay_buffer import ReplayBuffer_High
 from RL.util.memory import episodicmemory
 from RL.util.eval_tools import calculate_trading_metrics
+from RL.util.graph_utils import plot_money_curve
+
+
+
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -748,7 +752,7 @@ class DQN(object):
             s, s2, s3, info = s_, s2_, s3_, info_
             action_list_episode.append(a)
         return_margin, final_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)    
-        metrics = calculate_trading_metrics(self.df,test_env.trade_records, test_env.money_history, self.no_risk_return) 
+        metrics = calculate_trading_metrics(self.df,test_env.trade_records, test_env.value_history, self.no_risk_return) 
       
         total_amount= metrics['total_amount'] #总交易金额
         annualized_volatility = metrics['annualized_volatility'] #年化波动率
@@ -761,6 +765,7 @@ class DQN(object):
         beta = metrics['beta'] #beta
         
         log_metrics_string = f"""
+        初始化金额:{test_env.initial_money:.2f},
         累计收益率:{return_margin:.2f},
         总交易金额:{total_amount:.2f},
         累积净收益:{final_balance:.2f},
@@ -776,6 +781,7 @@ class DQN(object):
         手续费:{commission_fee:.2f}
         """
         log.info(log_metrics_string)
+        plot_money_curve(test_env.trade_records, test_env.value_history, self.df, save_path)
         
         final_balance = test_env.final_balance
         action_list.append(action_list_episode)
@@ -797,7 +803,7 @@ class DQN(object):
         np.save(os.path.join(save_path, "commission_fee_history.npy"), commission_fee_list)
         
         np.save(os.path.join(save_path, "trade_records.npy"), np.array(test_env.trade_records))
-        np.save(os.path.join(save_path, "money_history.npy"), np.array(test_env.money_history))
+        np.save(os.path.join(save_path, "value_history.npy"), np.array(test_env.value_history))
             
 
     

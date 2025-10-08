@@ -129,7 +129,8 @@ class Testing_Env(gym.Env):
         # 资金记录         
         self.initial_money = (self.data["open"].iloc[0] * self.max_holding_number * (n_action -1)) * 1.1
         self.current_money = self.initial_money
-        self.money_history = []
+        self.current_value = self.current_money
+        self.value_history = []
 
 
     def calculate_value(self, price_information, position):
@@ -165,10 +166,10 @@ class Testing_Env(gym.Env):
         self.trend_state = self.data[self.tech_indicator_list_trend].values # 趋势特征状态
         self.clf_state = self.data[self.clf_list].values  ##分类特征状态
         # 资金记录
-        if self.initial_money == 0 :            
-            self.initial_money = self.data["open"].iloc[0] * self.max_holding_number
+        self.initial_money = self.data["open"].iloc[0] * self.max_holding_number
         self.current_money = self.initial_money
-        self.money_history = []
+        self.current_value = self.current_money
+        self.value_history = []
         # 重置奖励记录
         self.initial_reward = 0
 
@@ -254,8 +255,7 @@ class Testing_Env(gym.Env):
             # 更新资金记录
             self.sell_money_memory.append(cash) # 卖出收入
             self.needed_money_memory.append(0) # 买入支出
-            self.position = position
-            self.current_money = self.current_money + cash
+            self.position = position 
             
             # 记录交易信息
             if self.sell_size > 0:  # 只有实际发生交易时才记录
@@ -277,6 +277,8 @@ class Testing_Env(gym.Env):
             # 卖出奖励计算：当前价值 + 现金流入 - 上一时刻价值
             self.reward = current_value + cash - previous_value
             self.reward_history.append(self.reward)
+            self.current_money = self.current_money + cash 
+            self.current_value = self.current_money + self.calculate_value(previous_price_information, self.position)
 
 
         if previous_position < position:
@@ -289,7 +291,7 @@ class Testing_Env(gym.Env):
             # 更新资金记录
             self.needed_money_memory.append(needed_cash)  # 买入支出
             self.sell_money_memory.append(0) # 卖出收入
-            self.current_money = self.current_money - needed_cash
+            
             self.position = position
             
             # 记录交易信息
@@ -311,6 +313,8 @@ class Testing_Env(gym.Env):
             current_value = self.calculate_value(current_price_information, self.position)
             # 买入奖励计算：当前价值 - 所需现金 - 上一时刻价值
             self.reward = current_value - needed_cash - previous_value
+            self.current_money = self.current_money - needed_cash
+            self.current_value = self.current_money + self.calculate_value(previous_price_information, self.position)
             # 保存指标
             self.reward_history.append(self.reward)
 
@@ -323,22 +327,23 @@ class Testing_Env(gym.Env):
             #应该把手上的仓位全部平掉
             if self.position > 0:
                 self.sell_size = self.position
-                cash = self.sell_size * current_price_information['close'] * (1 - self.comission_fee)
-                commission_fee_amount = self.comission_fee * self.sell_size * current_price_information['close']
+                cash = self.sell_size * previous_price_information['close'] * (1 - self.comission_fee)
+                commission_fee_amount = self.comission_fee * self.sell_size * previous_price_information['close']
                 self.comission_fee_history.append(commission_fee_amount)
                 self.sell_money_memory.append(cash)
                 self.needed_money_memory.append(0)
                 self.current_money = self.current_money + cash
+                self.current_value = self.current_money
                 
                 # 记录交易信息
                 trade_record = {
                     'id': self.trade_id_counter,
-                    'datetime': current_price_information['timestamp'],  # 使用date作为交易时间
+                    'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
                     'amount': cash,
                     'quantity': self.sell_size,
                     'type': 'sell',
                     'commission_fee': commission_fee_amount,
-                    'price': current_price_information['close']
+                    'price': previous_price_information['close']
                 }
                 self.trade_records.append(trade_record)
                 self.trade_id_counter += 1                
@@ -355,7 +360,7 @@ class Testing_Env(gym.Env):
             log.info(f"terminal the portfit return_margin:{return_margin:.2f},portfit_margine:{portfit_margine:.2f},final_balance:{self.final_balance:.2f},pure_balance:{pure_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
             
         
-        self.money_history.append([current_price_information['timestamp'], self.current_money]) 
+        self.value_history.append([previous_price_information['timestamp'], self.current_value]) 
         # 返回观测值和环境状态
         return self.single_state, self.trend_state, self.clf_state.reshape(-1), self.reward, self.terminal, {
             "previous_action": action,

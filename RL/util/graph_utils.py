@@ -6,7 +6,7 @@ import logging
 import os
 log = logging.getLogger(__name__)
 
-def plot_money_curve(trade_records, money_history, df, save_path):
+def plot_money_curve(trade_records, value_history, df, save_path):
     """
     绘制图表
     - df价格曲线， 
@@ -15,7 +15,7 @@ def plot_money_curve(trade_records, money_history, df, save_path):
     - timestamp 是在3个数据集中都存在
     参数:
       trade_records   买卖记录，不是每个时间都有买卖记录
-      money_history   资金历史记录，
+      value_history   资金历史记录，
       df              价格数据
     """
     # 创建图表
@@ -51,15 +51,15 @@ def plot_money_curve(trade_records, money_history, df, save_path):
     # 创建第二个y轴用于资金价值
     ax2 = ax1.twinx()
     
-    # 处理money_history数据
-    if isinstance(money_history, list):
-        money_history = pd.DataFrame(money_history)
-    elif isinstance(money_history, np.ndarray):
-        money_history = pd.DataFrame(money_history.tolist())
+    # 处理value_history数据
+    if isinstance(value_history, list):
+        value_history = pd.DataFrame(value_history)
+    elif isinstance(value_history, np.ndarray):
+        value_history = pd.DataFrame(value_history.tolist())
     
     
     # 绘制资金价值曲线
-    ax2.plot(money_history.iloc[:, 0], money_history.iloc[:, 1], 
+    ax2.plot(value_history.iloc[:, 0], value_history.iloc[:, 1], 
                      label='资金价值', color='green')
     
     ax2.set_ylabel('资金价值', color='green')
