@@ -77,7 +77,7 @@ def plot_money_curve(trade_records, value_history, df, save_path):
     fig.tight_layout()
     
     # 显示图表
-    plt.show()
+    # plt.show()
     
     plt.savefig(os.path.join(save_path, "money_curve.png"))
     
