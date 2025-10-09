@@ -84,69 +84,29 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=5000000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=3000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
-parser.add_argument("--q_value_memorize_freq",type=int, default=10)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=2048)  # 批次大小 / Mini-batch size
-parser.add_argument("--eval_update_freq",type=int,default=2048)  # 网络更新频率 / Network update frequency
+parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
+parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
+parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
-parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
+parser.add_argument("--update_times",type=int,default=20)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=2.0 / 1000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=4.0 / 1000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=15)  # 训练轮次数 / Training epochs
+parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
 parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
 parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient
-parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
+parser.add_argument("--exp",type=str,default="exp1")
+parser.add_argument("--device",type=str,default="cpu")  # 计算设备 / Computation device
 
-# def val_cluster(
-#                 dataset,clf,alpha,label,
-#                 n_state_1,n_state_2,n_action,device,
-#                 val_data_path,
-#                 tech_indicator_list,
-#                 tech_indicator_list_trend,
-#                 transcation_cost,
-#                 back_time_length,
-#                 max_holding_number,                    
-#                 epoch_path, save_path, initial_action, df_list): 
-def val_cluster(params,initial_action):
-    dataset=params['dataset']
-    clf=params['clf']
-    alpha=params['alpha']
-    label=params['label']
-    n_state_1=params['n_state_1']
-    n_state_2=params['n_state_2']
-    n_action=params['n_action']
-    device=params['device']
-                
-    val_data_path=params['val_data_path']
-    tech_indicator_list=params['tech_indicator_list']
-    tech_indicator_list_trend=params['tech_indicator_list_trend']
-    transcation_cost=params['transcation_cost']
-    back_time_length=params['back_time_length']
-    max_holding_number=params['max_holding_number']
-    epoch_path=params['epoch_path']
-    val_path=params['val_path']
-    df_list=params['df_list']
-    log_dir = params['log_dir']
-        
-    
-    config_log(log_dir,pfx=f'val-{initial_action}-')
-    dqn_eval = DQN_EVAL(n_state_1,n_state_2,n_action,device,
-                val_data_path,
-                tech_indicator_list,
-                tech_indicator_list_trend,
-                transcation_cost,
-                back_time_length,
-                max_holding_number)
-    return dqn_eval.val_cluster(epoch_path, val_path, int(initial_action), df_list)
         
 def seed_torch(seed):
     random.seed(seed)
@@ -173,11 +133,11 @@ class DQN(object):
         else:
             self.device = torch.device("cpu")
         log.info(self.device)
-        self.result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), '{}'.format(args.clf), str(int(args.alpha)), args.label)
+        self.result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), str(int(args.alpha)), args.label)
         self.label = int(args.label.split('_')[1])
         
         
-        self.logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), '{}'.format(args.clf), str(int(args.alpha)), args.label)
+        self.logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), str(int(args.alpha)), args.label)
         os.makedirs(self.logs_dir, exist_ok=True) 
         
         config_log(self.logs_dir,pfx='train-')
@@ -236,7 +196,7 @@ class DQN(object):
 
         self.transcation_cost = args.transcation_cost
         self.back_time_length = args.back_time_length
-        self.n_action = 2
+        self.n_action = 10
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
         self.eval_net = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.device)
@@ -430,8 +390,8 @@ class DQN(object):
                 transcation_cost=self.transcation_cost,
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
-                initial_action=random_position_list[i],
-                alpha = 0)
+                num_action=self.n_action,                
+                initial_action=random_position_list[i] )
         # 重置环境获取初始状态 / Reset environment to get initial state
         single_state, trend_state, info = train_env.reset()
         episode_reward_sum = 0
@@ -623,38 +583,21 @@ class DQN(object):
             val_path = os.path.join(epoch_path, "val")
             if not os.path.exists(val_path):
                 os.makedirs(val_path)
-            return_rate_0 = 0 
-            return_rate_1 = 0
-            # 执行集群验证 / Execute cluster validation
-            with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
-                _df_list = self.val_index[self.label]
-                var_param = {
-                    'log_dir':self.logs_dir,
-                    'dataset': self.dataset,
-                    'clf':self.clf,
-                    'alpha':self.alpha,
-                    'label':self.label,
-                    'n_state_1':self.n_state_1,
-                    "n_state_2":self.n_state_2,
-                    "n_action":self.n_action,
-                    "device":self.device,
-                    "val_data_path":self.val_data_path,
-                    "tech_indicator_list": self.tech_indicator_list,
-                    "tech_indicator_list_trend":self.tech_indicator_list_trend,
-                    "transcation_cost": self.transcation_cost,
-                    "back_time_length": self.back_time_length,
-                    "max_holding_number": self.max_holding_number, 
-                    "epoch_path": epoch_path,                                           
-                    "val_path":val_path, 
-                    "df_list":_df_list
-                }
-                future0 = executor.submit(val_cluster, var_param, "0")
-                future1 = executor.submit(val_cluster, var_param, "1")
-                
-                return_rate_0 = future0.result()
-                return_rate_1 = future1.result()
+            
+            return_rates = []
+            var_df_list = self.val_index[self.label]
+            for initial_action in range(0,self.n_action):
+                dqn_eval = DQN_EVAL(self.n_state_1,self.n_state_2,self.n_action,self.device,
+                    self.val_data_path,
+                    self.tech_indicator_list,
+                    self.tech_indicator_list_trend,
+                    self.transcation_cost,
+                    self.back_time_length,
+                    self.max_holding_number)
+                return_rate = dqn_eval.val_cluster(epoch_path, val_path, int(initial_action), var_df_list)
+                return_rates.append(return_rate)
             # 计算平均验证收益率 / Calculate average validation return rate
-            return_rate_eval = (return_rate_0 + return_rate_1) / 2
+            return_rate_eval = np.mean(return_rates)
             # 更新最佳模型 / Update best model if improved
             if return_rate_eval > best_return_rate:
                 best_return_rate = return_rate_eval
@@ -663,7 +606,10 @@ class DQN(object):
         best_model = self.eval_net.state_dict()
         # 保存最佳模型到指定路径 / Save best model to specified path
         if best_model is not None:
-            best_model_path = os.path.join(self.result_path, 'best_model.pkl')
+            best_model_folder_path = os.path.join(self.result_path, 'best_model')
+            if not os.path.exists(best_model_folder_path):
+                os.makedirs(best_model_folder_path)
+            best_model_path = os.path.join(best_model_folder_path, 'best_model.pkl')
             torch.save(best_model, best_model_path)
 
     

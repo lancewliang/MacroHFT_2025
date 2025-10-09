@@ -145,7 +145,7 @@ class DQN_EVAL(object):
         for i in range(df_number):
             log.info(f"validating on df {df_list[i]}")
             # 加载验证数据文件 / Load validation data file
-            self.df = pd.read_feather(os.path.join(self.val_data_path, "df_{}.feather".format(df_list[i])))   
+            self.df = pd.read_feather(os.path.join(self.val_data_path, "df_{}.feather".format(df_list[i])))
             # 初始化测试环境 / Initialize testing environment         
             val_env = Testing_Env(
                     df=self.df,

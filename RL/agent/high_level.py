@@ -650,7 +650,7 @@ class DQN(object):
             if return_rate_eval > best_return_rate:
                 best_return_rate = return_rate_eval
                 best_model = self.hyperagent.state_dict()
-                best_model_path = os.path.join("./result/high_level", '{}'.format(self.dataset), 'best_model.pkl')
+                best_model_path = os.path.join(self.result_path, 'best_model.pkl')
                 torch.save(best_model, best_model_path)
                 # 保存最佳模型到文件
                 # Save best model to disk
@@ -658,7 +658,7 @@ class DQN(object):
         
         # 执行最终测试评估
         # Execute final test evaluation
-        final_result_path = os.path.join("./result/high_level", '{}'.format(self.dataset))
+        final_result_path = self.result_path
         self.test_cluster(best_model_path, final_result_path)
 
 

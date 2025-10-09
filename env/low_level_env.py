@@ -345,8 +345,9 @@ class Training_Env(Testing_Env):
         transcation_cost=transcation_cost,
         back_time_length=back_time_length,
         max_holding_number=max_holding_number,
+        num_action=2,        
         initial_action = 0,
-        alpha=alpha,
+       
     ):
         """
         训练环境初始化
@@ -367,9 +368,9 @@ class Training_Env(Testing_Env):
         if q_table_dict.get(df_path,None) is None:            
             # 构建 Q 表（用于强化学习策略优化）
             q_table_dict[df_path] = make_q_table_reward(df,
-                                            num_action=2,
+                                            num_action=num_action,
                                             max_holding=max_holding_number,
-                                            commission_fee=0.001,
+                                            commission_fee=transcation_cost,
                                             reward_scale=1,
                                             gamma=0.99,
                                             max_punish=1e12)
