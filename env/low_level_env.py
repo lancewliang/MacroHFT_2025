@@ -222,6 +222,8 @@ class Testing_Env(gym.Env):
         self.previous_position = previous_position
         self.position = position
         self.changing = (self.position != self.previous_position)
+        
+        
         # 处理卖出操作
         if previous_position >= position:
             self.sell_size = previous_position - position
@@ -237,6 +239,9 @@ class Testing_Env(gym.Env):
             current_value = self.calculate_value(current_price_information, self.position)
             # 卖出奖励计算：当前价值 + 现金流入 - 上一时刻价值
             self.reward = current_value + cash - previous_value
+            if previous_position==0 and position==0:
+                self.reward = previous_price_information['close']*-0.01
+                
             if previous_value == 0:
                 return_rate = 0
             else:
@@ -265,7 +270,9 @@ class Testing_Env(gym.Env):
             # 保存指标
             self.reward_history.append(self.reward)
             self.return_rate = return_rate
-            
+
+        
+        
         # 更新持仓记录
         self.previous_position = self.position
 

@@ -101,11 +101,11 @@ parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长�
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
-parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
+parser.add_argument("--label",type=str,default="label_100")  # 标签列名称 / Label column name
 parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--exp",type=str,default="exp1")
-parser.add_argument("--device",type=str,default="cpu")  # 计算设备 / Computation device
+parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 
         
 def seed_torch(seed):
@@ -327,7 +327,7 @@ class DQN(object):
             action = torch.max(actions_value, 1)[1].data.cpu().numpy()
             action = action[0]
         else:
-            action_choice = [0,1]
+            action_choice = list(range(int(self.n_action/2))) 
             action = random.choice(action_choice)
         return action
 
