@@ -131,7 +131,7 @@ class DQN(object):
         if torch.cuda.is_available():
             self.device = torch.device(args.device)
         else:
-            self.device = torch.device("cpu")
+            self.device = torch.device("cpu") 
         log.info(self.device)
         self.result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), str(int(args.alpha)), args.label)
         self.label = int(args.label.split('_')[1])

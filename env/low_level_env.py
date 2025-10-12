@@ -277,6 +277,14 @@ class Testing_Env(gym.Env):
         self.previous_position = self.position
 
         if self.terminal:
+            if self.position > 0:
+                self.sell_size = self.position
+                cash = self.sell_size * previous_price_information['close'] * (1 - self.comission_fee)
+                commission_fee_amount = self.comission_fee * self.sell_size * previous_price_information['close']
+                self.comission_fee_history.append(commission_fee_amount)
+                self.sell_money_memory.append(cash)
+                self.needed_money_memory.append(0)
+                self.position = 0
             # 终止时计算最终收益
             return_margin, pure_balance, required_money, commission_fee = self.get_final_return_rate()
             self.pured_balance = pure_balance
