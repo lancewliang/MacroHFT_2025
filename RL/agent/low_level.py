@@ -103,7 +103,7 @@ parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step T
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
 parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
 parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
-parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient
+parser.add_argument("--alpha",type=float,default=4)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--exp",type=str,default="exp1")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 
@@ -134,11 +134,11 @@ class DQN(object):
             self.device = torch.device("cpu") 
         self.epsilon_device = torch.device("cpu") 
         log.info(self.device)
-        self.result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), str(int(args.alpha)), args.label)
+        self.result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), args.label, str(int(args.alpha)))
         self.label = int(args.label.split('_')[1])
         
         
-        self.logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), str(int(args.alpha)), args.label)
+        self.logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), args.label, str(int(args.alpha)))
         os.makedirs(self.logs_dir, exist_ok=True) 
         
         config_log(self.logs_dir,pfx='train-')
@@ -594,25 +594,29 @@ class DQN(object):
             log.info(f"start val epoch {epoch_counter}")
             return_rates = []
             var_df_list = self.val_index[self.label]
-            for initial_action in range(0,self.n_action):
-                dqn_eval = DQN_EVAL(self.n_state_1,self.n_state_2,self.n_action,"cpu",
-                    self.val_data_path,
-                    self.tech_indicator_list,
-                    self.tech_indicator_list_trend,
-                    self.transcation_cost,
-                    self.back_time_length,
-                    self.max_holding_number)
-                return_rate = dqn_eval.val_cluster(epoch_path, val_path, int(initial_action), var_df_list)
-                return_rates.append(return_rate)
-            # 计算平均验证收益率 / Calculate average validation return rate
-            return_rate_eval = np.mean(return_rates)
-            log.info(f"end val epoch {epoch_counter}.best_return_rate:{return_rate_eval}")
-            # 更新最佳模型 / Update best model if improved
-            if return_rate_eval > best_return_rate:
-                best_return_rate = return_rate_eval
+            if len(var_df_list) >0:
+                for initial_action in range(0,self.n_action):
+                    dqn_eval = DQN_EVAL(self.n_state_1,self.n_state_2,self.n_action,"cpu",
+                        self.val_data_path,
+                        self.tech_indicator_list,
+                        self.tech_indicator_list_trend,
+                        self.transcation_cost,
+                        self.back_time_length,
+                        self.max_holding_number)
+                    return_rate = dqn_eval.val_cluster(epoch_path, val_path, int(initial_action), var_df_list)
+                    return_rates.append(return_rate)
+                # 计算平均验证收益率 / Calculate average validation return rate
+                return_rate_eval = np.mean(return_rates)
+                log.info(f"end val epoch {epoch_counter}.return_rate_eval:{return_rate_eval}")
+                            # 更新最佳模型 / Update best model if improved
+                if return_rate_eval > best_return_rate:
+                    best_return_rate = return_rate_eval
+                    best_model = self.eval_net.state_dict()
+                    log.info(f"best model updated to epoch {epoch_counter}.best_return_rate:{best_return_rate}")
+            else:
+                log.info(f"end val epoch {epoch_counter}.self.label {self.label} var_df_list 没有，使用最后的模型")
                 best_model = self.eval_net.state_dict()
-                log.info(f"best model updated to epoch {epoch_counter}.best_return_rate:{best_return_rate}")
-        best_model = self.eval_net.state_dict()
+
         # 保存最佳模型到指定路径 / Save best model to specified path
         if best_model is not None:
             best_model_folder_path = os.path.join(self.result_path, 'best_model')

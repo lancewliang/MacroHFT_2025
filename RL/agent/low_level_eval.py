@@ -247,7 +247,7 @@ class DQN_EVAL(object):
         """
         
         # 获取验证数据索引列表 / Get validation data index list
-        df_number = int(len(df_list)) 
+        # df_number = int(len(df_list)) 
         # 初始化验证数据收集容器 / Initialize containers for validation data collection
         action_list = []
         reward_list = []
@@ -258,7 +258,7 @@ class DQN_EVAL(object):
         # 准备多进程参数 / Prepare multiprocessing parameters
         # 获取CPU核心数，但限制最大进程数以避免资源耗尽
         num_processes = 8
-        log.info(f"Using {num_processes} processes for parallel validation")
+        log.info(f"Using {num_processes} processes for parallel validation df_list:{df_list}")
         
         # 创建参数列表，每个元素是一个包含所有必要参数的元组
         args_list = [
@@ -277,6 +277,7 @@ class DQN_EVAL(object):
             # 收集结果
             for result in results:
                 action_list_episode, reward_list_episode, final_balance, required_money, commission_fee = result
+                log.info(f"val _validate_worker  final_balance: {final_balance}, required_money: {required_money}, commission_fee: {commission_fee}")
                 action_list.append(action_list_episode)
                 reward_list.append(reward_list_episode)
                 final_balance_list.append(final_balance)
@@ -285,4 +286,5 @@ class DQN_EVAL(object):
         
         # 保存验证结果并计算平均收益率 / Save validation results and calculate mean return rate
         return_rate_mean = self._save_val_result(save_path, initial_action, action_list, reward_list, final_balance_list, required_money_list, commission_fee_list)
+        log.info(f"val return_rate_mean:{return_rate_mean}")
         return return_rate_mean
