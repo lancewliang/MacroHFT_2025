@@ -101,7 +101,7 @@ parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长�
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
-parser.add_argument("--label",type=str,default="label_100")  # 标签列名称 / Label column name
+parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
 parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--exp",type=str,default="exp1")
@@ -132,6 +132,7 @@ class DQN(object):
             self.device = torch.device(args.device)
         else:
             self.device = torch.device("cpu") 
+        self.epsilon_device = torch.device("cpu") 
         log.info(self.device)
         self.result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), str(int(args.alpha)), args.label)
         self.label = int(args.label.split('_')[1])
@@ -199,6 +200,7 @@ class DQN(object):
         self.n_action = 10
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
+        self.epsilon_net = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
         self.eval_net = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.device)
         self.target_net =subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.device)
         self.hardupdate()
@@ -297,6 +299,8 @@ class DQN(object):
         return td_error, KL_loss, torch.mean(q_current), torch.mean(q_target)
 
     def hardupdate(self):
+        self.epsilon_net.eval() 
+        self.epsilon_net.load_state_dict(self.eval_net.state_dict())
         self.target_net.load_state_dict(self.eval_net.state_dict())
 
     def select_action(self, state, state_trend, info):
@@ -319,11 +323,11 @@ class DQN(object):
         Returns:
             int: 选择的动作编号 / Selected action number
         """
-        x1 = torch.FloatTensor(state).to(self.device)
-        x2 = torch.FloatTensor(state_trend).to(self.device)
-        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.device), 0).to(self.device)
+        x1 = torch.FloatTensor(state).to(self.epsilon_device)
+        x2 = torch.FloatTensor(state_trend).to(self.epsilon_device)
+        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.epsilon_device), 0).to(self.epsilon_device)
         if np.random.uniform() < (1-self.epsilon):
-            actions_value = self.eval_net(x1, x2, previous_action)
+            actions_value = self.epsilon_net(x1, x2, previous_action)
             action = torch.max(actions_value, 1)[1].data.cpu().numpy()
             action = action[0]
         else:
@@ -425,9 +429,12 @@ class DQN(object):
                         self.writer.add_scalar(tag="KL_loss", scalar_value=KL_loss.cpu(), global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_eval", scalar_value=q_eval.cpu(), global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_target", scalar_value=q_target.cpu(), global_step=self.update_counter, walltime=None)
+                self.epsilon_net.load_state_dict(self.eval_net.state_dict())
             # 判断回合结束 / Check if episode is done
             if done:
+                
                 break
+        self.epsilon_net.load_state_dict(self.eval_net.state_dict())
         # 更新周期计数器 / Update episode counter
         episode_counter += 1
         # 获取最终账户信息 / Get final account information
@@ -547,6 +554,7 @@ class DQN(object):
                 df_index = random_list[i]
                 if df_datasets_dict.get(df_index,None) is None:
                     df_data = pd.read_feather(os.path.join(self.train_data_path, "df_{}.feather".format(df_index)))
+                    # .head(100)
                     df_datasets_dict[df_index] = df_data
             # 遍历所有数据文件进行训练 / Train with all data files
             log.info(f"epoch {epoch_counter + 1} start files")
@@ -583,11 +591,11 @@ class DQN(object):
             val_path = os.path.join(epoch_path, "val")
             if not os.path.exists(val_path):
                 os.makedirs(val_path)
-            
+            log.info(f"start val epoch {epoch_counter}")
             return_rates = []
             var_df_list = self.val_index[self.label]
             for initial_action in range(0,self.n_action):
-                dqn_eval = DQN_EVAL(self.n_state_1,self.n_state_2,self.n_action,self.device,
+                dqn_eval = DQN_EVAL(self.n_state_1,self.n_state_2,self.n_action,"cpu",
                     self.val_data_path,
                     self.tech_indicator_list,
                     self.tech_indicator_list_trend,
@@ -598,6 +606,7 @@ class DQN(object):
                 return_rates.append(return_rate)
             # 计算平均验证收益率 / Calculate average validation return rate
             return_rate_eval = np.mean(return_rates)
+            log.info(f"end val epoch {epoch_counter}.best_return_rate:{return_rate_eval}")
             # 更新最佳模型 / Update best model if improved
             if return_rate_eval > best_return_rate:
                 best_return_rate = return_rate_eval

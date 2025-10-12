@@ -7,9 +7,57 @@ import pandas as pd
 from env.low_level_env import Testing_Env, Training_Env
 import numpy as np
 from model.net import *
+import multiprocessing
 
+# Set multiprocessing start method to 'spawn' to avoid CUDA re-initialization issues
+multiprocessing.set_start_method('spawn', force=True)
 
-class DQN_EVAL(object):
+# 辅助函数，用于在子进程中执行验证任务
+def _validate_worker(args):
+    """
+    在子进程中执行验证任务的辅助函数
+    
+    中文说明：
+    此函数被设计为在子进程中运行，接收验证所需的所有参数，
+    创建EVALER实例并执行验证，返回验证结果。
+    
+    English description:
+    This function is designed to run in a child process, receives all parameters needed for validation,
+    creates an EVALER instance and performs validation, returns validation results.
+    
+    Parameters:
+        args (tuple): 包含验证所需的所有参数的元组
+            - n_state_1: 状态空间维度1
+            - n_state_2: 状态空间维度2
+            - n_action: 动作空间维度
+            - device: 计算设备
+            - val_data_path: 验证数据路径
+            - tech_indicator_list: 技术指标列表
+            - tech_indicator_list_trend: 趋势技术指标列表
+            - transcation_cost: 交易成本
+            - back_time_length: 回溯时间长度
+            - max_holding_number: 最大持仓数量
+            - epoch_path: 模型路径
+            - df_id: 数据文件ID
+            - initial_action: 初始动作
+            
+    Returns:
+        tuple: 验证结果 (action_list_episode, reward_list_episode, final_balance, required_money, commission_fee)
+    """
+    # 解包参数
+    (n_state_1, n_state_2, n_action, device, val_data_path, 
+     tech_indicator_list, tech_indicator_list_trend, transcation_cost,
+     back_time_length, max_holding_number, epoch_path, df_id, initial_action) = args
+    
+    # 创建EVALER实例
+    evaler = EVALER(n_state_1, n_state_2, n_action, device,
+                   val_data_path, tech_indicator_list, tech_indicator_list_trend,
+                   transcation_cost, back_time_length, max_holding_number)
+    
+    # 执行验证并返回结果
+    return evaler.val_cluster(epoch_path, df_id, initial_action)
+
+class EVALER(object):
     def __init__(self, n_state_1,n_state_2,n_action,device,
                  val_data_path,
                  tech_indicator_list,
@@ -18,15 +66,16 @@ class DQN_EVAL(object):
                  back_time_length,
                  max_holding_number,
                  ):  
+        self.device = torch.device(device) 
         self.val_data_path = val_data_path
-        self.eval_net = subagent(n_state_1, n_state_2, n_action, 64).to(device)
-        self.device = device
+        self.eval_net = subagent(n_state_1, n_state_2, n_action, 64).to(self.device)
+
         self.tech_indicator_list=tech_indicator_list
         self.tech_indicator_list_trend=tech_indicator_list_trend
         self.transcation_cost=transcation_cost
         self.back_time_length=back_time_length
         self.max_holding_number=max_holding_number
-    
+        
     def test_select_action(self, state, state_trend, info):
         """
         测试阶段选择最优动作（无随机探索）
@@ -55,6 +104,71 @@ class DQN_EVAL(object):
         action = torch.max(actions_value, 1)[1].data.cpu().numpy()
         action = action[0]
         return action
+    
+    def val_cluster(self, epoch_path, df_id, initial_action):
+        # 加载训练模型 / Load trained model
+        self.eval_net.load_state_dict(torch.load(os.path.join(epoch_path, "trained_model.pkl"), map_location=self.device))
+        self.eval_net.to(self.device)
+        # 设置为验证模式 / Set evaluation mode
+        self.eval_net.eval()
+        log.info(f"validating on df {df_id}")
+        # 加载验证数据文件 / Load validation data file
+        self.df = pd.read_feather(os.path.join(self.val_data_path, "df_{}.feather".format(df_id)))
+        # .head(100)
+        # 初始化测试环境 / Initialize testing environment         
+        val_env = Testing_Env(
+                df=self.df,
+                tech_indicator_list=self.tech_indicator_list,
+                tech_indicator_list_trend=self.tech_indicator_list_trend,
+                transcation_cost=self.transcation_cost,
+                back_time_length=self.back_time_length,
+                max_holding_number=self.max_holding_number,
+                initial_action=initial_action)
+        # 重置环境获取初始状态 / Reset environment to get initial state
+        single_state, trend_state, info = val_env.reset()
+        done = False
+        # 单次验证过程的临时存储 / Temporary storage for current validation episode
+        action_list_episode = []
+        reward_list_episode = []
+        # 执行验证交互循环 / Execute validation interaction loop
+        while not done:
+            # 选择测试动作 / Select test action
+            action = self.test_select_action(single_state, trend_state, info)
+            # 执行动作获取下一个状态 / Execute action to get next state
+            next_single_state, next_trend_state, reward, done, next_info = val_env.step(action)
+            # 收集奖励和状态信息 / Collect reward and state information
+            reward_list_episode.append(reward)
+            single_state, trend_state, info = next_single_state, next_trend_state, next_info
+            action_list_episode.append(action)
+            # 获取账户信息（静默模式） / Get account information (silent mode)
+            portfit_magine, final_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
+        # 获取最终账户信息 / Get final account information
+        final_balance = val_env.final_balance
+        required_money = val_env.required_money       
+        return action_list_episode, reward_list_episode ,final_balance, required_money, commission_fee
+    
+class DQN_EVAL(object):
+    def __init__(self, n_state_1,n_state_2,n_action,device,
+                 val_data_path,
+                 tech_indicator_list,
+                 tech_indicator_list_trend,
+                 transcation_cost,
+                 back_time_length,
+                 max_holding_number,
+                 ):  
+        self.n_state_1= n_state_1
+        self.n_state_2= n_state_2
+        self.n_action= n_action
+        self.val_data_path = val_data_path
+        # self.eval_net = subagent(n_state_1, n_state_2, n_action, 64).to(device)
+        self.device = device
+        self.tech_indicator_list=tech_indicator_list
+        self.tech_indicator_list_trend=tech_indicator_list_trend
+        self.transcation_cost=transcation_cost
+        self.back_time_length=back_time_length
+        self.max_holding_number=max_holding_number
+    
+
     
     def _save_val_result(self, 
                         save_path, 
@@ -115,73 +229,60 @@ class DQN_EVAL(object):
         中文说明：
         本函数负责加载指定周期的训练模型，在验证集上执行测试，
         收集动作、奖励、账户余额等指标，并保存验证结果。
+        使用多进程并行处理验证任务以提高效率。
         
         English description:
         This function loads the trained model for specified epoch, executes testing on validation set,
         collects metrics including actions, rewards, account balances, and saves validation results.
+        Uses multiprocessing to parallelize validation tasks for improved efficiency.
         
         Parameters:
             epoch_path (str): 模型所在目录路径 / Path to trained model directory
             save_path (str): 结果保存目录路径 / Path to save validation results
             initial_action (int): 初始动作标识 / Initial action identifier
+            df_list (list): 数据文件ID列表 / List of data file IDs
             
         Returns:
             float: 计算得到的平均收益率（已处理NaN值）
         """
-        # 加载训练模型 / Load trained model
-        self.eval_net.load_state_dict(torch.load(os.path.join(epoch_path, "trained_model.pkl")))
-        # 设置为验证模式 / Set evaluation mode
-        self.eval_net.eval()
-        # 获取验证数据索引列表 / Get validation data index list
         
-        df_number=int(len(df_list)) 
+        # 获取验证数据索引列表 / Get validation data index list
+        df_number = int(len(df_list)) 
         # 初始化验证数据收集容器 / Initialize containers for validation data collection
         action_list = []
         reward_list = []
         final_balance_list = []
         required_money_list = []
         commission_fee_list = []
-        # 遍历所有验证数据文件 / Iterate through all validation data files
-        for i in range(df_number):
-            log.info(f"validating on df {df_list[i]}")
-            # 加载验证数据文件 / Load validation data file
-            self.df = pd.read_feather(os.path.join(self.val_data_path, "df_{}.feather".format(df_list[i])))
-            # 初始化测试环境 / Initialize testing environment         
-            val_env = Testing_Env(
-                    df=self.df,
-                    tech_indicator_list=self.tech_indicator_list,
-                    tech_indicator_list_trend=self.tech_indicator_list_trend,
-                    transcation_cost=self.transcation_cost,
-                    back_time_length=self.back_time_length,
-                    max_holding_number=self.max_holding_number,
-                    initial_action=initial_action)
-            # 重置环境获取初始状态 / Reset environment to get initial state
-            single_state, trend_state, info = val_env.reset()
-            done = False
-            # 单次验证过程的临时存储 / Temporary storage for current validation episode
-            action_list_episode = []
-            reward_list_episode = []
-            # 执行验证交互循环 / Execute validation interaction loop
-            while not done:
-                # 选择测试动作 / Select test action
-                action = self.test_select_action(single_state, trend_state, info)
-                # 执行动作获取下一个状态 / Execute action to get next state
-                next_single_state, next_trend_state, reward, done, next_info = val_env.step(action)
-                # 收集奖励和状态信息 / Collect reward and state information
-                reward_list_episode.append(reward)
-                single_state, trend_state, info = next_single_state, next_trend_state, next_info
-                action_list_episode.append(action)
-                # 获取账户信息（静默模式） / Get account information (silent mode)
-                portfit_magine, final_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
-            # 获取最终账户信息 / Get final account information
-            final_balance = val_env.final_balance
-            required_money = val_env.required_money
-            # 存储单次验证结果 / Store current validation episode results
-            action_list.append(action_list_episode)
-            reward_list.append(reward_list_episode)
-            final_balance_list.append(final_balance)
-            required_money_list.append(required_money)
-            commission_fee_list.append(commission_fee)
+        
+        # 准备多进程参数 / Prepare multiprocessing parameters
+        # 获取CPU核心数，但限制最大进程数以避免资源耗尽
+        num_processes = 8
+        log.info(f"Using {num_processes} processes for parallel validation")
+        
+        # 创建参数列表，每个元素是一个包含所有必要参数的元组
+        args_list = [
+            (self.n_state_1, self.n_state_2, self.n_action, self.device,
+             self.val_data_path, self.tech_indicator_list, self.tech_indicator_list_trend,
+             self.transcation_cost, self.back_time_length, self.max_holding_number,
+             epoch_path, df_id, initial_action)
+            for df_id in df_list
+        ]
+        
+        # 创建进程池并并行执行验证任务
+        with multiprocessing.Pool(processes=num_processes) as pool:
+            # 使用imap_unordered以获取结果顺序无关的方式提高效率
+            results = pool.imap_unordered(_validate_worker, args_list)
+            
+            # 收集结果
+            for result in results:
+                action_list_episode, reward_list_episode, final_balance, required_money, commission_fee = result
+                action_list.append(action_list_episode)
+                reward_list.append(reward_list_episode)
+                final_balance_list.append(final_balance)
+                required_money_list.append(required_money)
+                commission_fee_list.append(commission_fee)
+        
         # 保存验证结果并计算平均收益率 / Save validation results and calculate mean return rate
         return_rate_mean = self._save_val_result(save_path, initial_action, action_list, reward_list, final_balance_list, required_money_list, commission_fee_list)
         return return_rate_mean
