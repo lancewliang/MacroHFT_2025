@@ -239,8 +239,9 @@ class Testing_Env(gym.Env):
             current_value = self.calculate_value(current_price_information, self.position)
             # 卖出奖励计算：当前价值 + 现金流入 - 上一时刻价值
             self.reward = current_value + cash - previous_value
-            if previous_position==0 and position==0:
-                self.reward = previous_price_information['close']*-0.01
+            # 牛市有效（猜测，原论文没有这个部分）
+            # if previous_position==0 and position==0:
+            #     self.reward = -previous_price_information['close']*0.01*self.max_holding_number
                 
             if previous_value == 0:
                 return_rate = 0
@@ -286,16 +287,16 @@ class Testing_Env(gym.Env):
                 self.needed_money_memory.append(0)
                 self.position = 0
             # 终止时计算最终收益
-            return_margin, pure_balance, required_money, commission_fee = self.get_final_return_rate()
-            self.pured_balance = pure_balance
-            self.final_balance = self.pured_balance + self.calculate_value(current_price_information, self.position)
+            return_margin, final_balance, required_money, commission_fee = self.get_final_return_rate()
+            self.pured_balance = final_balance
+            self.final_balance = final_balance
             self.required_money = required_money
             portfit_margine = self.final_balance / self.required_money
             # - return_margin: 风险调整收益率（核心评估指标）
             # - final_balance: 绝对收益值
             # - required_money: 最大资金需求（资金曲线最低点绝对值）
             # - commission_fee: 累计交易手续费
-            log.info(f"the portfit return_margin:{return_margin},pure_balance:{pure_balance},required_money:{required_money},commission_fee:{commission_fee},final_balance:{self.final_balance},portfit_margine:{portfit_margine}")
+            log.info(f"the portfit return_margin:{return_margin},final_balance:{final_balance},required_money:{required_money},commission_fee:{commission_fee},final_balance:{self.final_balance},portfit_margine:{portfit_margine}")
             
         # 返回观测值和环境状态
         return self.single_state, self.trend_state, self.reward, self.terminal, {

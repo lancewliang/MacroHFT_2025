@@ -107,7 +107,8 @@ class EVALER(object):
     
     def val_cluster(self, epoch_path, df_id, initial_action):
         # 加载训练模型 / Load trained model
-        self.eval_net.load_state_dict(torch.load(os.path.join(epoch_path, "trained_model.pkl"), map_location=self.device))
+        loaded_params = torch.load(os.path.join(epoch_path, "trained_model.pkl"), map_location=self.device)
+        self.eval_net.load_state_dict(loaded_params)
         self.eval_net.to(self.device)
         # 设置为验证模式 / Set evaluation mode
         self.eval_net.eval()
@@ -257,7 +258,7 @@ class DQN_EVAL(object):
         
         # 准备多进程参数 / Prepare multiprocessing parameters
         # 获取CPU核心数，但限制最大进程数以避免资源耗尽
-        num_processes = 8
+        num_processes = 5
         log.info(f"Using {num_processes} processes for parallel validation df_list:{df_list}")
         
         # 创建参数列表，每个元素是一个包含所有必要参数的元组
