@@ -19,5 +19,3 @@ Update: We now provide trained model checkpoints for sub-agents, which can be di
 ## Step 3
 Run scripts/high_level.sh for meta-policy optimization. 
 
-
-# Can't replay lowlevel policy suceessfully. FUCK
