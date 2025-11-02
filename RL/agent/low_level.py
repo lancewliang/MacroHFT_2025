@@ -65,9 +65,11 @@ import os
 import logging as log
 from torch.utils.tensorboard import SummaryWriter
 import warnings
-
+import shutil
+import queue
+import threading
 warnings.filterwarnings("ignore")
-
+from concurrent.futures import ThreadPoolExecutor
 ROOT = str(pathlib.Path(__file__).resolve().parents[3])
 sys.path.append(ROOT)
 sys.path.insert(0, ".")
@@ -222,6 +224,8 @@ class DQN(object):
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
         self.alpha = args.alpha
+        self.best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record 
+        self.validation_queue = queue.Queue(maxsize=10)  # 验证任务队列，限制大小避免内存溢出
         
     def update(self, replay_buffer):
         """
@@ -525,7 +529,7 @@ class DQN(object):
             None
         """
         # 获取训练数据索引列表 / Get training data index list
-        
+        self._start_validation_consumer()
         df_list = self.train_index[self.label]
         df_number=int(len(df_list))       
         step_counter = 0  # 全局步数计数器 / Global step counter
@@ -534,8 +538,7 @@ class DQN(object):
          
         # 初始化经验回放缓冲区 / Initialize replay buffer 
         self.replay_buffer = ReplayBuffer(args, self.n_state_1, self.n_state_2, self.n_action)   
-        best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record
-        best_model = None                   # 最佳模型参数存储 / Best model parameters storage
+        best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record 
         
         #缓存训练数据，防止重复加载
         df_datasets_dict = {}
@@ -577,8 +580,6 @@ class DQN(object):
                                                                         epoch_final_balance_train_list,
                                                                         epoch_required_money_train_list,
                                                                         epoch_reward_sum_train_list)
-                    
-               
                 
             # 更新训练轮次计数器 / Update epoch counter
             epoch_counter += 1            
@@ -599,40 +600,93 @@ class DQN(object):
             if not os.path.exists(val_path):
                 os.makedirs(val_path)
             log.info(f"start val epoch {epoch_counter}")
-            return_rates = []
-            var_df_list = self.val_index[self.label]
-            if len(var_df_list) >0:
-                # for initial_action in range(0,self.n_action):
-                dqn_eval = DQN_EVAL(self.n_state_1,self.n_state_2,self.n_action,"cpu",
-                    self.val_data_path,
-                    self.tech_indicator_list,
-                    self.tech_indicator_list_trend,
-                    self.transcation_cost,
-                    self.back_time_length,
-                    self.max_holding_number)
-                return_rate = dqn_eval.val_cluster(epoch_path, val_path, int(0), var_df_list)
-                return_rates.append(return_rate)
-                # 计算平均验证收益率 / Calculate average validation return rate
-                return_rate_eval = np.mean(return_rates)
-                log.info(f"end val epoch {epoch_counter}.return_rate_eval:{return_rate_eval}")
-                            # 更新最佳模型 / Update best model if improved
-                if return_rate_eval > best_return_rate:
-                    best_return_rate = return_rate_eval
-                    best_model = self.eval_net.state_dict()
-                    log.info(f"best model updated to epoch {epoch_counter}.best_return_rate:{best_return_rate}")
-            else:
-                log.info(f"end val epoch {epoch_counter}.self.label {self.label} var_df_list 没有，使用最后的模型")
-                best_model = self.eval_net.state_dict()
+             
+            validation_task = (epoch_counter, epoch_path, val_path)
+            self.validation_queue.put(validation_task, timeout=5.0)
+            log.info(f"验证任务已加入队列: epoch {epoch_counter}")
+            
+    def _start_validation_consumer(self):
+        def validation_consumer():
+            log.info("验证消费者线程启动")
+            while True:
+                try:
+                    # 从队列获取验证任务，设置超时避免无限等待
+                    validation_task = self.validation_queue.get(timeout=1.0)
+                    if validation_task is None:  # 停止信号
+                        break
+                    
+                    epoch_counter, epoch_path, val_path = validation_task
+                    log.info(f"验证消费者处理任务: epoch {epoch_counter}")
+                    var_df_list = self.val_index[self.label]
+                    self._async_validate_and_save(epoch_counter, epoch_path, val_path, var_df_list)
+                except queue.Empty:
+                    time.sleep(60)
+                    continue  # 队列为空，继续等待
+                except Exception as e:
+                    log.error(f"验证消费者线程异常: {e}")
+                    continue
+            
+            log.info("验证消费者线程停止")
+        
+        # 启动验证消费者线程 
+        self.validation_thread = threading.Thread(target=validation_consumer, daemon=True)
+        self.validation_thread.start()
+        log.info("验证消费者线程已启动")
 
-        # 保存最佳模型到指定路径 / Save best model to specified path
-        if best_model is not None:
-            best_model_folder_path = os.path.join(self.result_path, 'best_model')
-            if not os.path.exists(best_model_folder_path):
-                os.makedirs(best_model_folder_path)
-            best_model_path = os.path.join(best_model_folder_path, 'best_model.pkl')
-            torch.save(best_model, best_model_path)
 
-    
+    def _async_validate_and_save(self, epoch_counter, epoch_path, val_path, var_df_list ):
+        """
+        异步执行验证和保存最佳模型的逻辑
+        
+        中文说明：
+        本函数在单独的线程中执行验证和最佳模型保存操作，
+        避免阻塞主训练进程。
+        
+        English description:
+        This function performs validation and best model saving in a separate thread,
+        preventing blocking of the main training process.
+        
+        Parameters:
+            epoch_counter (int): 当前训练周期 / Current epoch counter
+            epoch_path (str): 模型保存路径 / Model saving path
+            val_path (str): 验证结果保存路径 / Validation result saving path
+            var_df_list (list): 验证数据索引列表 / Validation data index list
+            
+        Returns:
+            tuple: return_rate_eval 
+        """
+        log.info(f"异步验证开始: epoch {epoch_counter}")
+        return_rates = []
+        
+        if len(var_df_list) > 0:
+            # 创建验证实例 / Create validation instance
+            dqn_eval = DQN_EVAL(self.n_state_1, self.n_state_2, self.n_action, "cpu",
+                self.val_data_path,
+                self.tech_indicator_list,
+                self.tech_indicator_list_trend,
+                self.transcation_cost,
+                self.back_time_length,
+                self.max_holding_number)
+            
+            # 执行验证 / Perform validation
+            return_rate = dqn_eval.val_cluster(epoch_path, val_path, int(0), var_df_list)
+            return_rates.append(return_rate)            
+            # 计算平均验证收益率 / Calculate average validation return rate
+            return_rate_eval = np.mean(return_rates)
+            log.info(f"异步验证结束: epoch {epoch_counter}, 验证收益率: {return_rate_eval}")
+            if return_rate_eval > self.best_return_rate:
+                self.best_return_rate = return_rate_eval 
+                model_file = os.path.join(epoch_path, "trained_model.pkl")
+                log.info(f"best model updated to epoch {epoch_counter}.best_return_rate:{self.best_return_rate}")
+                best_model_folder_path = os.path.join(self.result_path, 'best_model')
+                if not os.path.exists(best_model_folder_path):
+                    os.makedirs(best_model_folder_path)
+                best_model_path = os.path.join(best_model_folder_path, 'best_model.pkl')
+                #将模型保存到指定路径 / Save model to specified path    
+                shutil.copy2(model_file, best_model_path)
+
+
+
     
 from logging import StreamHandler, FileHandler, Formatter
 import logging as log
