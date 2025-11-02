@@ -14,7 +14,7 @@ import logging as log
 ROOT = str(pathlib.Path(__file__).resolve().parents[2])
 sys.path.append(ROOT)
 sys.path.insert(0, ".")
-
+from env.actions import actions
 from tools.demonstration import make_q_table_reward
 
 tech_indicator_list = np.load('./data/feature_list/single_features.npy', allow_pickle=True).tolist()
@@ -91,12 +91,15 @@ class Testing_Env(gym.Env):
         # back_time_length: 状态回溯时间长度
         # max_holding_number: 最大持仓数量
         # initial_action: 初始动作
-        
+        initial_action_detail = actions[initial_action]
+        initial_long_action = initial_action_detail[0]
+        initial_short_action = initial_action_detail[1]
         # 定义动作空间和观测空间
         self.tech_indicator_list = tech_indicator_list
         self.tech_indicator_list_trend = tech_indicator_list_trend
         self.df = df
-        self.initial_action = initial_action
+        self.initial_long_action = initial_long_action
+        self.initial_short_action = initial_short_action
         self.action_space = spaces.Discrete(2)
         self.observation_space = spaces.Box(
             low=-np.inf,
@@ -111,14 +114,19 @@ class Testing_Env(gym.Env):
         self.initial_reward = 0
         self.reward_history = [self.initial_reward]
         self.previous_action = initial_action
+        self.initial_action = initial_action
         self.comission_fee = transcation_cost
         self.max_holding_number = max_holding_number
         self.needed_money_memory = []
         self.sell_money_memory = []
         self.comission_fee_history = []
-        self.previous_position = initial_action * self.max_holding_number
-        self.position = initial_action * self.max_holding_number
-        self.initial_action = initial_action
+        # 初始化多头和空头仓位
+        self.previous_long_position = initial_long_action * self.max_holding_number
+        self.long_position = initial_long_action * self.max_holding_number
+        self.previous_short_position = initial_short_action * self.max_holding_number
+        self.short_position = initial_short_action * self.max_holding_number
+        self.initial_long_action = initial_long_action
+        self.initial_short_action = initial_short_action
 
 
 
@@ -165,10 +173,12 @@ class Testing_Env(gym.Env):
         self.sell_money_memory = []  # 清空卖出资金记录
         self.comission_fee_history = []  # 清空手续费记录
         # 设置初始持仓（根据初始动作参数）
-        self.previous_position = self.initial_action * self.max_holding_number
-        self.position = self.initial_action * self.max_holding_number
+        self.previous_long_position = self.initial_long_action * self.max_holding_number
+        self.long_position = self.initial_long_action * self.max_holding_number
+        self.previous_short_position = self.initial_short_action * self.max_holding_number
+        self.short_position = self.initial_short_action * self.max_holding_number
         # 特殊处理：记录初始持仓所需资金
-        self.needed_money_memory.append(self.position * self.data.iloc[-1]["close"])
+        self.needed_money_memory.append(self.long_position * self.data.iloc[-1]["close"])
         self.sell_money_memory.append(0)
         # 返回初始观测值和动作信息
         return self.single_state, self.trend_state, {
@@ -204,11 +214,17 @@ class Testing_Env(gym.Env):
         """
         
         # 将动作转换为实际持仓量
-        normlized_action = action
-        position = self.max_holding_number * normlized_action  # 将离散动作(0/1)转换为实际持仓量（0或max_holding_number）
+        action_detail = actions[action]
+        long_action = action_detail[0]
+        short_action = action_detail[1]
+        normlized_long_action = long_action
+        normlized_short_action = short_action
+        long_position = self.max_holding_number * normlized_long_action  # 将离散动作(0/1)转换为实际持仓量（0或max_holding_number）
+        short_position = self.max_holding_number * normlized_short_action  # 空头持仓量
         self.terminal = (self.m >= len(self.df.index.unique()) - 1) # 检查是否达到数据末尾（终止条件）
         # 保存当前状态信息
-        previous_position = self.previous_position
+        previous_long_position = self.previous_long_position
+        previous_short_position = self.previous_short_position
         previous_price_information = self.data.iloc[-1]
         # 更新时间步和数据窗口
         self.m += 1
@@ -219,41 +235,48 @@ class Testing_Env(gym.Env):
         self.single_state = self.data[self.tech_indicator_list].values
         self.trend_state = self.data[self.tech_indicator_list_trend].values
         # 保存状态转移信息
-        self.previous_position = previous_position
-        self.position = position
-        self.changing = (self.position != self.previous_position)
+        self.previous_long_position = previous_long_position
+        self.long_position = long_position
+        self.previous_short_position = previous_short_position
+        self.short_position = short_position
+        # self.changing = (self.long_position != self.previous_long_position)
         
+        # 计算多头仓位变化带来的收益
+        long_reward = 0
+        short_reward = 0
         
         # 处理卖出操作
-        if previous_position >= position:
-            self.sell_size = previous_position - position
+        if previous_long_position >= long_position:
+            self.sell_size = previous_long_position - long_position
             # 计算卖出收入（扣除手续费）
             cash = self.sell_size * previous_price_information['close'] * (1 - self.comission_fee)
             self.comission_fee_history.append(self.comission_fee * self.sell_size * previous_price_information['close']) # 记录交易成本
             # 更新资金记录
             self.sell_money_memory.append(cash) # 卖出收入
             self.needed_money_memory.append(0) # 买入支出
-            self.position = position
+            self.long_position = long_position
             # 计算持仓价值变化
-            previous_value = self.calculate_value(previous_price_information, self.previous_position)
-            current_value = self.calculate_value(current_price_information, self.position)
-            # 卖出奖励计算：当前价值 + 现金流入 - 上一时刻价值
-            self.reward = current_value + cash - previous_value
-            # 牛市有效（猜测，原论文没有这个部分）
-            # if previous_position==0 and position==0:
-            #     self.reward = -previous_price_information['close']*0.01*self.max_holding_number
+            previous_long_value = self.calculate_value(previous_price_information, self.previous_long_position)
+            current_long_value = self.calculate_value(current_price_information, self.long_position)
+            long_reward = (current_long_value + cash) - previous_long_value
+                                    
+            # # 卖出奖励计算：当前价值 + 现金流入 - 上一时刻价值
+            # self.reward = current_long_value + cash - previous_long_value
+            # # 牛市有效（猜测，原论文没有这个部分）
+            # # if previous_position==0 and position==0:
+            # #     self.reward = -previous_price_information['close']*0.01*self.max_holding_number
                 
-            if previous_value == 0:
-                return_rate = 0
-            else:
-                return_rate = (current_value + cash - previous_value) / previous_value
-            # 保存指标
-            self.return_rate = return_rate
-            self.reward_history.append(self.reward)
+            # if previous_long_value == 0:
+            #     return_rate = 0
+            # else:
+            #     return_rate = (current_long_value + cash - previous_long_value) / previous_long_value
+            # # 保存指标
+            # self.return_rate = return_rate
+            # self.reward_history.append(self.reward)
 
-        if previous_position < position:
+        elif previous_long_position < long_position:
             # 处理买入操作
-            self.buy_size = position - previous_position # 计算买入数量
+            self.buy_size = long_position - previous_long_position # 计算买入数量
             # 计算买入所需资金（包含手续费）
             needed_cash = self.buy_size * previous_price_information['close'] * (1 + self.comission_fee)
             self.comission_fee_history.append(self.comission_fee * self.buy_size * previous_price_information['close']) # 记录交易成本
@@ -261,31 +284,83 @@ class Testing_Env(gym.Env):
             self.needed_money_memory.append(needed_cash)  # 买入支出
             self.sell_money_memory.append(0) # 卖出收入
 
-            self.position = position
+            self.long_position = long_position
             # 计算持仓价值变化
-            previous_value = self.calculate_value(previous_price_information, self.previous_position)
-            current_value = self.calculate_value(current_price_information, self.position)
+            previous_long_value = self.calculate_value(previous_price_information, self.previous_long_position)
+            current_long_value = self.calculate_value(current_price_information, self.long_position)
             # 买入奖励计算：当前价值 - 所需现金 - 上一时刻价值
-            self.reward = current_value - needed_cash - previous_value
-            return_rate = (current_value - needed_cash - previous_value) / (previous_value + needed_cash)
-            # 保存指标
-            self.reward_history.append(self.reward)
-            self.return_rate = return_rate
-
-        
+            long_reward = current_long_value - (needed_cash + previous_long_value)
+            # return_rate = (current_long_value - needed_cash - previous_long_value) / (previous_long_value + needed_cash)
+            # # 保存指标
+            # self.reward_history.append(self.reward)
+            # self.return_rate = return_rate
+            
+        # 处理空头仓位变化
+        if previous_short_position >= short_position:
+            # 空头减仓（平仓）
+            close_size = previous_short_position - short_position            
+            # 平空头仓位：支付平仓价格，获得开仓时的收益
+            cash_value = close_size * previous_price_information['close']
+            cash_in = cash_value * (1 - self.comission_fee)
+            commission_fee_amount = self.comission_fee * close_size * previous_price_information['close']
+            self.comission_fee_history.append(commission_fee_amount)
+            self.sell_money_memory.append(cash_in)
+            self.needed_money_memory.append(0)            
+            # 空头收益计算：开仓时卖出，平仓时买入
+            # 计算上一刻和这一刻的仓位价值
+            previous_short_value = self.calculate_value(previous_price_information, self.previous_short_position)
+            current_short_value = self.calculate_value(current_price_information, self.short_position)
+            if self.short_position == 0:
+                # 没有未来没有仓位
+                # 收益 = 上一刻仓位价值 - 现金流入 - 费用 + 未来的（假设）价差
+                short_reward =  previous_short_value - (cash_value+commission_fee_amount) + ((previous_price_information['close']-current_price_information['close'])*self.previous_short_position)
+            else:
+                # 收益 = 上一刻仓位价值 - 现金流入 - 费用 - 下一刻仓位价值 
+                short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
+               
+        elif previous_short_position < short_position:
+            # 空头加仓（开仓）
+            open_size = short_position - previous_short_position        
+            # 开空头仓位：卖出获得现金，但需要支付保证金和手续费
+            cash_value = open_size * previous_price_information['close']
+            cash_out = cash_value * (1 + self.comission_fee)
+            commission_fee_amount = self.comission_fee * open_size * previous_price_information['close']
+            self.comission_fee_history.append(commission_fee_amount)
+            self.sell_money_memory.append(0)
+            self.needed_money_memory.append(cash_out)
+            # 空头开仓时获得现金，但需要承担未来平仓的风险
+            # 计算上一刻和这一刻的仓位价值
+            previous_short_value = self.calculate_value(previous_price_information, self.previous_short_position)
+            current_short_value = self.calculate_value(current_price_information, self.short_position)
+            # 收益 = 上一刻仓位价值 + 开仓的价值 - 手续费- 这下一刻仓位价值
+            short_reward = previous_short_value + (cash_value - commission_fee_amount) - current_short_value 
+         # 计算总收益
+        self.reward = long_reward + short_reward
+        self.reward_history.append(self.reward)
         
         # 更新持仓记录
-        self.previous_position = self.position
+        self.previous_long_position = self.long_position
+        self.previous_short_position = self.short_position       
+         
 
         if self.terminal:
-            if self.position > 0:
-                self.sell_size = self.position
+            # 终止时平掉所有仓位
+            if self.long_position > 0:
+                self.sell_size = self.long_position
                 cash = self.sell_size * previous_price_information['close'] * (1 - self.comission_fee)
                 commission_fee_amount = self.comission_fee * self.sell_size * previous_price_information['close']
                 self.comission_fee_history.append(commission_fee_amount)
                 self.sell_money_memory.append(cash)
                 self.needed_money_memory.append(0)
-                self.position = 0
+                self.long_position = 0
+            if self.short_position > 0:
+                close_size = self.short_position
+                cash_in = close_size * previous_price_information['close'] * (1 - self.comission_fee)
+                commission_fee_amount = self.comission_fee * close_size * previous_price_information['close']
+                self.comission_fee_history.append(commission_fee_amount)
+                self.sell_money_memory.append(cash_in)
+                self.needed_money_memory.append(0)
+                self.short_position = 0
             # 终止时计算最终收益
             return_margin, final_balance, required_money, commission_fee = self.get_final_return_rate()
             self.pured_balance = final_balance
@@ -362,7 +437,7 @@ class Training_Env(Testing_Env):
         back_time_length=back_time_length,
         max_holding_number=max_holding_number,
         num_action=2,        
-        initial_action = 0,
+        initial_action =0,
        
     ):
         """
@@ -375,12 +450,12 @@ class Training_Env(Testing_Env):
             transcation_cost: 交易手续费率
             back_time_length: 状态回溯时间步长
             max_holding_number: 最大持仓量
-            initial_action: 初始动作（0-空仓，1-满仓）
+            initial_long_action: 初始动作（0-空仓，1-满仓）
             alpha: Q 表奖励衰减系数（未使用）
         """
         super(Training_Env,
               self).__init__(df, tech_indicator_list, tech_indicator_list_trend, transcation_cost,
-                             back_time_length, max_holding_number)
+                             back_time_length, max_holding_number, initial_action)
         if q_table_dict.get(df_path,None) is None:            
             # 构建 Q 表（用于强化学习策略优化）
             q_table_dict[df_path] = make_q_table_reward(df,
@@ -406,8 +481,8 @@ class Training_Env(Testing_Env):
         single_state, trend_state, info = super(Training_Env, self).reset()
         # 初始化交易状态
         self.previous_action = self.initial_action
-        self.previous_position = self.initial_action * self.max_holding_number
-        self.position = self.initial_action * self.max_holding_number
+        self.previous_long_position = self.initial_long_action * self.max_holding_number
+        self.long_position = self.initial_long_action * self.max_holding_number
         # 从 Q 表获取初始 Q 值
         info['q_value'] = self.q_table[self.m - 1][self.previous_action][:]
         return single_state, trend_state, info

@@ -77,6 +77,7 @@ from env.low_level_env import Testing_Env, Training_Env
 from RL.util.utili import get_ada, get_epsilon, LinearDecaySchedule
 from RL.util.replay_buffer import ReplayBuffer
 from RL.agent.low_level_eval import DQN_EVAL
+from env.actions import actions
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -84,7 +85,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=1200000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=100)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
@@ -96,14 +97,14 @@ parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 /
 parser.add_argument("--update_times",type=int,default=30)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.999)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=2.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=2.0/10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
+parser.add_argument("--epoch_number",type=int,default=30)  # 训练轮次数 / Training epochs
 parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
 parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
-parser.add_argument("--alpha",type=float,default=4)  # KL损失权重系数 / KL loss weight coefficient
+parser.add_argument("--alpha",type=float,default=1)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--exp",type=str,default="exp4")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 
@@ -121,6 +122,8 @@ def seed_torch(seed):
 def calculate_alpha(diff, k):
     alpha = 16 * (1 - torch.exp(-k * diff))
     return torch.clip(alpha, 0, 16)
+
+
 
 
 class DQN(object):
@@ -197,7 +200,7 @@ class DQN(object):
 
         self.transcation_cost = args.transcation_cost
         self.back_time_length = args.back_time_length
-        self.n_action = 2
+        self.n_action = len(actions)
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
         self.epsilon_net = subagent(self.n_state_1, self.n_state_2, self.n_action, 128).to(self.epsilon_device)
@@ -599,16 +602,16 @@ class DQN(object):
             return_rates = []
             var_df_list = self.val_index[self.label]
             if len(var_df_list) >0:
-                for initial_action in range(0,self.n_action):
-                    dqn_eval = DQN_EVAL(self.n_state_1,self.n_state_2,self.n_action,"cpu",
-                        self.val_data_path,
-                        self.tech_indicator_list,
-                        self.tech_indicator_list_trend,
-                        self.transcation_cost,
-                        self.back_time_length,
-                        self.max_holding_number)
-                    return_rate = dqn_eval.val_cluster(epoch_path, val_path, int(initial_action), var_df_list)
-                    return_rates.append(return_rate)
+                # for initial_action in range(0,self.n_action):
+                dqn_eval = DQN_EVAL(self.n_state_1,self.n_state_2,self.n_action,"cpu",
+                    self.val_data_path,
+                    self.tech_indicator_list,
+                    self.tech_indicator_list_trend,
+                    self.transcation_cost,
+                    self.back_time_length,
+                    self.max_holding_number)
+                return_rate = dqn_eval.val_cluster(epoch_path, val_path, int(0), var_df_list)
+                return_rates.append(return_rate)
                 # 计算平均验证收益率 / Calculate average validation return rate
                 return_rate_eval = np.mean(return_rates)
                 log.info(f"end val epoch {epoch_counter}.return_rate_eval:{return_rate_eval}")

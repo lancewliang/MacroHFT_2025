@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-
+from env.actions import actions
 # 该文件实现了基于强化学习的Q-table奖励值生成模块，主要用于金融交易场景中的决策优化。以下是详细架构分析：
 
 # 1. 核心功能：
@@ -62,35 +62,97 @@ def make_q_table_reward(df: pd.DataFrame,
     def calculate_value(price_information, position):
         return price_information["close"] * position
 
-    scale_factor = num_action - 1
+    # # Calculate short position value (negative value for short positions)
+    # # 计算空头持仓价值（空头持仓为负值）
+    # def calculate_short_value(price_information, position):
+    #     return -price_information["close"] * position
+
+    # scale_factor = num_action - 1
+    scale_factor = 2 - 1
 
     for t in range(2, len(df) + 1):
         current_price_information = df.iloc[-t]
         future_price_information = df.iloc[-t + 1]
-        for previous_action in range(num_action):
-            for current_action in range(num_action):
-                if current_action > previous_action:
-                    # Buy operation calculation
-                    # 买入操作计算
-                    previous_position = previous_action / (scale_factor) * max_holding
-                    current_position = current_action / (scale_factor) * max_holding
-                    position_change = (current_action-previous_action) / scale_factor*max_holding
-                    buy_money = position_change * current_price_information['close'] * (1 + commission_fee)
-                    current_value = calculate_value(current_price_information, previous_position)
-                    future_value = calculate_value(future_price_information, current_position)
-                    reward = future_value - (current_value + buy_money)
-                    reward = reward_scale * reward
-                    q_table[len(df) - t][previous_action][current_action] = reward + gamma * np.max(q_table[len(df) - t + 1][current_action][:])
+        for previous_action_index in range(num_action):
+            previous_action = actions[previous_action_index]
+            for current_action_index in range(num_action):
+                current_action = actions[current_action_index]
+                
+                # 提取多头和空头持仓
+                previous_long_action = previous_action[0]
+                previous_short_action = previous_action[1]
+                current_long_action = current_action[0]
+                current_short_action = current_action[1]
+                
+                # 计算多头持仓奖励
+                long_reward = 0
+                if current_long_action > previous_long_action:
+                    # 多头买入操作计算
+                    previous_long_position = previous_long_action / scale_factor * max_holding
+                    current_long_position = current_long_action / scale_factor * max_holding
+                    long_position_change = (current_long_action - previous_long_action) / scale_factor * max_holding
+                    long_buy_money = long_position_change * current_price_information['close'] * (1 + commission_fee)
+                    current_long_value = calculate_value(current_price_information, previous_long_position)
+                    future_long_value = calculate_value(future_price_information, current_long_position)
+                    long_reward = future_long_value - (current_long_value + long_buy_money)
+                elif current_long_action ==0 and previous_long_action ==0:
+                    long_reward = 0
                 else:
-                     # Sell operation calculation
-                    # 卖出操作计算
-                    previous_position = previous_action / (scale_factor) * max_holding
-                    current_position = current_action / (scale_factor) * max_holding
-                    position_change = (previous_action-current_action) / scale_factor*max_holding
-                    sell_money = position_change * current_price_information['close'] * (1 - commission_fee)
-                    current_value = calculate_value(current_price_information, previous_position)
-                    future_value = calculate_value(future_price_information, current_position)
-                    reward = future_value + sell_money - current_value
-                    reward = reward_scale * reward
-                    q_table[len(df) - t][previous_action][current_action] = reward + gamma * np.max(q_table[len(df) - t + 1][current_action][:])
+                    # 多头卖出操作计算
+                    previous_long_position = previous_long_action / scale_factor * max_holding
+                    current_long_position = current_long_action / scale_factor * max_holding
+                    long_position_change = (previous_long_action - current_long_action) / scale_factor * max_holding
+                    long_sell_money = long_position_change * current_price_information['close'] * (1 - commission_fee)
+                    current_long_value = calculate_value(current_price_information, previous_long_position)
+                    future_long_value = calculate_value(future_price_information, current_long_position)
+                    long_reward = future_long_value + long_sell_money - current_long_value
+                
+                # 计算空头持仓奖励
+                short_reward = 0
+                if current_short_action > previous_short_action:
+                    # 空头开仓操作计算（相当于卖出）
+                    previous_short_position = previous_short_action / scale_factor * max_holding
+                    current_short_position = current_short_action / scale_factor * max_holding
+                    short_position_change = (current_short_action - previous_short_action) / scale_factor * max_holding
+                    short_open_money = short_position_change * current_price_information['close'] * (1 - commission_fee)  # 开仓收钱
+                    current_short_value = calculate_value(current_price_information, previous_short_position)
+                    future_short_value = calculate_value(future_price_information, current_short_position)
+                    # short_reward = future_short_value + short_open_money - current_short_value
+                    short_reward = (current_short_value + short_open_money) - future_short_value
+                    # 0 +9.8 -10*1 ping = -0.2
+                    # 0 +9.8 -11*1 zhang = -1.2
+                    # 0 +9.8 -9*1 die = 0.8
+                elif current_short_action ==0 and previous_short_action ==0:
+                    short_reward = 0
+                else:
+                    # 空头平仓操作计算（相当于买入）
+                    previous_short_position = previous_short_action / scale_factor * max_holding
+                    current_short_position = current_short_action / scale_factor * max_holding
+                    short_position_change = (previous_short_action - current_short_action) / scale_factor * max_holding
+                    short_close_money = short_position_change * current_price_information['close'] * (1 + commission_fee)  # 平仓付钱
+                    current_short_value = calculate_value(current_price_information, previous_short_position)
+                    future_short_value = calculate_value(future_price_information, current_short_position)
+                    if current_short_position == 0 :
+                        # 特殊设计：当空头平仓时，计算的是当前价格与未来价格的差值，而不是当前价格与当前价格的差值
+                        # 收益 = 上一刻仓位价值 - 现金流出 - 费用 + 未来的（假设）价差
+                        short_reward =  current_short_value - short_close_money + ((current_price_information['close']-future_price_information['close'])*previous_short_position)
+                    else:  
+                        # 收益 = 上一刻仓位价值 - 现金流入 - 费用 - 下一刻仓位价值 
+                        short_reward =  current_short_value - short_close_money - future_short_value
+                    #previous_short_position = 1  and current_short_position=0
+                    # 10*1 -10.2 +(10-10)*1 ping = -0.2
+                    # 10*1 -10.2 +(10-11)*1 zhang = -1.2
+                    # 10*1 -10.2 +(10-9)*1 die = 0.8
+                    #previous_short_position = 2  and current_short_position=0
+                    # 10*2 -20.2 +(10-10)*2 ping = -0.2
+                    # 10*2 -20.2 +(10-11)*2 zhang = -2.2
+                    # 10*2 -20.2 +(10-9)*2 die = 1.8
+                    #previous_short_position = 2  and current_short_position=1
+                    # 10*2 -10.2 -10*1 ping = -0.2
+                    # 10*2 -10.2 -11*1 zhang = -1.2
+                    # 10*2 -10.2 -9*1 die = 0.8
+                total_reward = long_reward + short_reward
+                total_reward = reward_scale * total_reward
+                    
+                q_table[len(df) - t][previous_action_index][current_action_index] = total_reward + gamma * np.max(q_table[len(df) - t + 1][current_action_index][:])
     return q_table
