@@ -45,12 +45,12 @@ def _validate_worker(args):
         tuple: 验证结果 (action_list_episode, reward_list_episode, final_balance, required_money, commission_fee)
     """
     # 解包参数
-    (n_state_1, n_state_2, n_action, device, val_data_path, 
+    (n_state_1, n_state_2, actions, n_action, device, val_data_path, 
      tech_indicator_list, tech_indicator_list_trend, transcation_cost,
      back_time_length, max_holding_number, epoch_path, df_id, initial_action) = args
     
     # 创建EVALER实例
-    evaler = EVALER(n_state_1, n_state_2, n_action, device,
+    evaler = EVALER(n_state_1, n_state_2, actions, n_action, device,
                    val_data_path, tech_indicator_list, tech_indicator_list_trend,
                    transcation_cost, back_time_length, max_holding_number)
     
@@ -58,7 +58,7 @@ def _validate_worker(args):
     return evaler.val_cluster(epoch_path, df_id, initial_action)
 
 class EVALER(object):
-    def __init__(self, n_state_1,n_state_2,n_action,device,
+    def __init__(self, n_state_1,n_state_2, actions, n_action, device,
                  val_data_path,
                  tech_indicator_list,
                  tech_indicator_list_trend,
@@ -75,6 +75,7 @@ class EVALER(object):
         self.transcation_cost=transcation_cost
         self.back_time_length=back_time_length
         self.max_holding_number=max_holding_number
+        self.actions = actions
         
     def test_select_action(self, state, state_trend, info):
         """
@@ -124,6 +125,7 @@ class EVALER(object):
                 transcation_cost=self.transcation_cost,
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
+                actions=self.actions,
                 initial_action=initial_action)
         # 重置环境获取初始状态 / Reset environment to get initial state
         single_state, trend_state, info = val_env.reset()
@@ -149,7 +151,7 @@ class EVALER(object):
         return action_list_episode, reward_list_episode ,final_balance, required_money, commission_fee
     
 class DQN_EVAL(object):
-    def __init__(self, n_state_1,n_state_2,n_action,device,
+    def __init__(self, n_state_1,n_state_2,actions ,n_action,device,
                  val_data_path,
                  tech_indicator_list,
                  tech_indicator_list_trend,
@@ -159,6 +161,7 @@ class DQN_EVAL(object):
                  ):  
         self.n_state_1= n_state_1
         self.n_state_2= n_state_2
+        self.actions = actions
         self.n_action= n_action
         self.val_data_path = val_data_path
         # self.eval_net = subagent(n_state_1, n_state_2, n_action, 64).to(device)
@@ -263,7 +266,7 @@ class DQN_EVAL(object):
         
         # 创建参数列表，每个元素是一个包含所有必要参数的元组
         args_list = [
-            (self.n_state_1, self.n_state_2, self.n_action, self.device,
+            (self.n_state_1, self.n_state_2, self.actions , self.n_action, self.device,
              self.val_data_path, self.tech_indicator_list, self.tech_indicator_list_trend,
              self.transcation_cost, self.back_time_length, self.max_holding_number,
              epoch_path, df_id, initial_action)

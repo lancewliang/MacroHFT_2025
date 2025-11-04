@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from env.actions import actions
+ 
 # 该文件实现了基于强化学习的Q-table奖励值生成模块，主要用于金融交易场景中的决策优化。以下是详细架构分析：
 
 # 1. 核心功能：
@@ -36,6 +36,7 @@ from env.actions import actions
 # 可增加风险控制因子
 
 def make_q_table_reward(df: pd.DataFrame,
+                        actions,
                         num_action,
                         max_holding,
                         reward_scale=1000,
@@ -96,7 +97,7 @@ def make_q_table_reward(df: pd.DataFrame,
                     future_long_value = calculate_value(future_price_information, current_long_position)
                     long_reward = future_long_value - (current_long_value + long_buy_money)
                 elif current_long_action ==0 and previous_long_action ==0:
-                    long_reward = 0
+                    long_reward = (future_price_information['close']-current_price_information['close'])*max_holding*-0.8
                 else:
                     # 多头卖出操作计算
                     previous_long_position = previous_long_action / scale_factor * max_holding
@@ -105,7 +106,12 @@ def make_q_table_reward(df: pd.DataFrame,
                     long_sell_money = long_position_change * current_price_information['close'] * (1 - commission_fee)
                     current_long_value = calculate_value(current_price_information, previous_long_position)
                     future_long_value = calculate_value(future_price_information, current_long_position)
-                    long_reward = future_long_value + long_sell_money - current_long_value
+                    if current_long_position ==0:
+                        # 需要惩罚， 清仓后下一天可能的收益
+                        # 惩罚下一天可能的收益 明天-今天价格  9-10 跌1 奖励+1 (应该清仓)   11-10 涨1  惩罚-1 ， (不应该清仓)
+                        long_reward = long_sell_money - current_long_value - ((future_price_information['close']-current_price_information['close'])*previous_long_position)
+                    else:
+                        long_reward = future_long_value + long_sell_money - current_long_value
                 
                 # 计算空头持仓奖励
                 short_reward = 0
@@ -123,7 +129,7 @@ def make_q_table_reward(df: pd.DataFrame,
                     # 0 +9.8 -11*1 zhang = -1.2
                     # 0 +9.8 -9*1 die = 0.8
                 elif current_short_action ==0 and previous_short_action ==0:
-                    short_reward = 0
+                    short_reward = (current_price_information['close']-future_price_information['close'])*max_holding*-0.8
                 else:
                     # 空头平仓操作计算（相当于买入）
                     previous_short_position = previous_short_action / scale_factor * max_holding
@@ -135,6 +141,7 @@ def make_q_table_reward(df: pd.DataFrame,
                     if current_short_position == 0 :
                         # 特殊设计：当空头平仓时，计算的是当前价格与未来价格的差值，而不是当前价格与当前价格的差值
                         # 收益 = 上一刻仓位价值 - 现金流出 - 费用 + 未来的（假设）价差
+                        # 惩罚下一天可能的收益 今天-明天价格 10-9 跌1 奖励+1 (不应该清仓)  10-11 涨1  惩罚-1  (应该清仓) 
                         short_reward =  current_short_value - short_close_money + ((current_price_information['close']-future_price_information['close'])*previous_short_position)
                     else:  
                         # 收益 = 上一刻仓位价值 - 现金流入 - 费用 - 下一刻仓位价值 

@@ -79,7 +79,7 @@ from env.low_level_env import Testing_Env, Training_Env
 from RL.util.utili import get_ada, get_epsilon, LinearDecaySchedule
 from RL.util.replay_buffer import ReplayBuffer
 from RL.agent.low_level_eval import DQN_EVAL
-from env.actions import actions
+from env.actions import long_actions,short_actions,short_and_long_actions
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -87,29 +87,29 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=1200000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=1100000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=100)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=50)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=1e-6)  # 学习率 / Learning rate
+parser.add_argument("--lr", type=float, default=1e-7)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.1)  # 最小探索率 / Minimum exploration rate
-parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
+parser.add_argument("--decay_length",type=int,default=15)  # 探索衰减周期 / Exploration decay length
 parser.add_argument("--update_times",type=int,default=30)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.999)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=2.0/10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=4.0/10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
+parser.add_argument("--epoch_number",type=int,default=15)  # 训练轮次数 / Training epochs
 parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
 parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
 parser.add_argument("--alpha",type=float,default=1)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--exp",type=str,default="exp4")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
-
+parser.add_argument("--action_mode",type=str,default="long")  # 动作方向
         
 def seed_torch(seed):
     random.seed(seed)
@@ -200,9 +200,20 @@ class DQN(object):
         self.tech_indicator_list = np.load('./data/feature_list/single_features.npy', allow_pickle=True).tolist()
         self.tech_indicator_list_trend = np.load('./data/feature_list/trend_features.npy', allow_pickle=True).tolist()
 
+
+        self.action_mode = args.action_mode
+        if self.action_mode == 'long':
+            self.actions = long_actions
+        elif self.action_mode == 'short':
+            self.actions = short_actions
+        elif self.action_mode == 'both':
+            self.actions = short_and_long_actions
+        else:
+            raise Exception ("we do not support other action mode yet")
+
         self.transcation_cost = args.transcation_cost
         self.back_time_length = args.back_time_length
-        self.n_action = len(actions)
+        self.n_action = len(self.actions)
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
         self.epsilon_net = subagent(self.n_state_1, self.n_state_2, self.n_action, 128).to(self.epsilon_device)
@@ -402,7 +413,8 @@ class DQN(object):
                 transcation_cost=self.transcation_cost,
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
-                num_action=self.n_action,                
+                num_action=self.n_action,     
+                actions= self.actions,           
                 initial_action=0 )
         # 重置环境获取初始状态 / Reset environment to get initial state
         single_state, trend_state, info = train_env.reset()
@@ -611,7 +623,7 @@ class DQN(object):
             while True:
                 try:
                     # 从队列获取验证任务，设置超时避免无限等待
-                    validation_task = self.validation_queue.get(timeout=1.0)
+                    validation_task = self.validation_queue.get_nowait()
                     if validation_task is None:  # 停止信号
                         break
                     
@@ -660,7 +672,7 @@ class DQN(object):
         
         if len(var_df_list) > 0:
             # 创建验证实例 / Create validation instance
-            dqn_eval = DQN_EVAL(self.n_state_1, self.n_state_2, self.n_action, "cpu",
+            dqn_eval = DQN_EVAL(self.n_state_1, self.n_state_2, self.actions, self.n_action, "cpu",
                 self.val_data_path,
                 self.tech_indicator_list,
                 self.tech_indicator_list_trend,
@@ -673,7 +685,7 @@ class DQN(object):
             return_rates.append(return_rate)            
             # 计算平均验证收益率 / Calculate average validation return rate
             return_rate_eval = np.mean(return_rates)
-            log.info(f"异步验证结束: epoch {epoch_counter}, 验证收益率: {return_rate_eval}")
+            log.info(f"异步验证结束: epoch {epoch_counter}, 验证收益率: {return_rate_eval} best:{self.best_return_rate}")
             if return_rate_eval > self.best_return_rate:
                 self.best_return_rate = return_rate_eval 
                 model_file = os.path.join(epoch_path, "trained_model.pkl")
