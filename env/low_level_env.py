@@ -269,7 +269,7 @@ class Testing_Env(gym.Env):
             # # 保存指标
             # self.reward_history.append(self.reward)
             # self.return_rate = return_rate
-        elif long_position == 0 and self.previous_long_position ==0:
+        elif long_position == 0 and self.previous_long_position ==0 and (self.action_mode == "both" or self.action_mode == "long"):
             #什么都不干，并且没有仓位， 就需要惩罚下一天可能的收益
             long_reward = ((current_price_information['close']-previous_price_information['close'])*self.max_holding_number)*-0.8
         # 处理卖出操作
@@ -306,8 +306,7 @@ class Testing_Env(gym.Env):
             # # 保存指标
             # self.return_rate = return_rate
             # self.reward_history.append(self.reward)
-
-
+ 
             
         # 处理空头仓位变化
         if previous_short_position < short_position:
@@ -327,7 +326,7 @@ class Testing_Env(gym.Env):
             # 收益 = 上一刻仓位价值 + 开仓的价值 - 手续费- 这下一刻仓位价值       
             short_reward = previous_short_value + (cash_value - commission_fee_amount) - current_short_value         
         
-        elif self.short_position == 0 and self.previous_short_position ==0:
+        elif self.short_position == 0 and self.previous_short_position ==0 and (self.action_mode == "both" or self.action_mode == "short"):
             short_reward =  ((previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-0.8           
         else:
             # elif previous_short_position >= short_position:

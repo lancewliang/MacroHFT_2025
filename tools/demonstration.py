@@ -97,7 +97,7 @@ def make_q_table_reward(df: pd.DataFrame,
                     current_long_value = calculate_value(current_price_information, previous_long_position)
                     future_long_value = calculate_value(future_price_information, current_long_position)
                     long_reward = future_long_value - (current_long_value + long_buy_money)
-                elif current_long_action ==0 and previous_long_action ==0:
+                elif current_long_action ==0 and previous_long_action ==0 and (action_mode == "both" or action_mode == "long"):
                     long_reward = (future_price_information['close']-current_price_information['close'])*max_holding*-0.8
                 else:
                     # 多头卖出操作计算
@@ -129,7 +129,7 @@ def make_q_table_reward(df: pd.DataFrame,
                     # 0 +9.8 -10*1 ping = -0.2
                     # 0 +9.8 -11*1 zhang = -1.2
                     # 0 +9.8 -9*1 die = 0.8
-                elif current_short_action ==0 and previous_short_action ==0:
+                elif current_short_action ==0 and previous_short_action ==0 and (action_mode == "both" or action_mode == "short"):
                     short_reward = (current_price_information['close']-future_price_information['close'])*max_holding*-0.8
                 else:
                     # 空头平仓操作计算（相当于买入）
