@@ -153,7 +153,7 @@ class EVALER(object):
         return action_list_episode, reward_list_episode ,final_balance, required_money, commission_fee
     
 class DQN_EVAL(object):
-    def __init__(self, n_state_1,n_state_2,actions ,n_action,device,
+    def __init__(self, n_state_1,n_state_2,actions ,action_mode,n_action,device,
                  val_data_path,
                  tech_indicator_list,
                  tech_indicator_list_trend,
@@ -173,6 +173,7 @@ class DQN_EVAL(object):
         self.transcation_cost=transcation_cost
         self.back_time_length=back_time_length
         self.max_holding_number=max_holding_number
+        self.action_mode = action_mode
     
 
     
@@ -268,7 +269,7 @@ class DQN_EVAL(object):
         
         # 创建参数列表，每个元素是一个包含所有必要参数的元组
         args_list = [
-            (self.n_state_1, self.n_state_2, self.actions , self.n_action, self.device,
+            (self.n_state_1, self.n_state_2, self.actions , self.action_mode, self.n_action, self.device,
              self.val_data_path, self.tech_indicator_list, self.tech_indicator_list_trend,
              self.transcation_cost, self.back_time_length, self.max_holding_number,
              epoch_path, df_id, initial_action)

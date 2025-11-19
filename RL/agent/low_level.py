@@ -87,10 +87,10 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=1100000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=1200000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=100)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
+parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=50)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=1e-7)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
@@ -101,7 +101,7 @@ parser.add_argument("--gamma", type=float, default=0.999)  # 折扣因子 / Disc
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
 parser.add_argument("--transcation_cost",type=float,default=4.0/10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
-parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
+parser.add_argument("--seed",type=int,default=6234571)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=17)  # 训练轮次数 / Training epochs
 parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
@@ -673,7 +673,7 @@ class DQN(object):
         
         if len(var_df_list) > 0:
             # 创建验证实例 / Create validation instance
-            dqn_eval = DQN_EVAL(self.n_state_1, self.n_state_2, self.action_mode, self.actions, self.n_action, "cpu",
+            dqn_eval = DQN_EVAL(self.n_state_1, self.n_state_2, self.actions,self.action_mode,  self.n_action, self.epsilon_device,
                 self.val_data_path,
                 self.tech_indicator_list,
                 self.tech_indicator_list_trend,

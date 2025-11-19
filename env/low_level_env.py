@@ -130,6 +130,7 @@ class Testing_Env(gym.Env):
         self.short_position = initial_short_action * self.max_holding_number
         self.initial_long_action = initial_long_action
         self.initial_short_action = initial_short_action
+        self.action_mode = action_mode
 
 
 
@@ -487,6 +488,7 @@ class Training_Env(Testing_Env):
                                             num_action=num_action,
                                             max_holding=max_holding_number,
                                             commission_fee=transcation_cost,
+                                            action_mode=action_mode,
                                             reward_scale=1,
                                             gamma=0.99,
                                             max_punish=1e12)
