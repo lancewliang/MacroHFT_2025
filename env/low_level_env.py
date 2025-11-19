@@ -354,7 +354,7 @@ class Testing_Env(gym.Env):
                 short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
 
         
-        if long_position == 0 and self.previous_long_position ==0 and long_position == 0 and self.previous_long_position ==0 and self.action_mode == "long":
+        if long_position == 0 and self.previous_long_position ==0 and long_position == 0 and self.previous_long_position ==0 and self.action_mode == "both":
             self.reward = (abs(previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-1
         else:   
             # 计算总收益
