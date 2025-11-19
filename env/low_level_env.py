@@ -82,6 +82,7 @@ class Testing_Env(gym.Env):
         back_time_length=back_time_length,  #状态回溯时间步长
         max_holding_number=max_holding_number,  #最大持仓量
         actions=[],
+        action_mode="long",
         initial_action=0,
     ):
         # 初始化交易环境参数
@@ -327,12 +328,7 @@ class Testing_Env(gym.Env):
             short_reward = previous_short_value + (cash_value - commission_fee_amount) - current_short_value         
         
         elif self.short_position == 0 and self.previous_short_position ==0:
-            if long_position == 0 and self.previous_long_position ==0:
-                #上一把空仓这一把也是空仓
-                short_reward = ((previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-0.8
-            else:
-                #什么都不干，并且没有仓位， 就需要惩罚
-                short_reward =  ((previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-0.8           
+            short_reward =  ((previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-0.8           
         else:
             # elif previous_short_position >= short_position:
             # 空头减仓（平仓）
@@ -357,8 +353,12 @@ class Testing_Env(gym.Env):
                 # 收益 = 上一刻仓位价值 - 现金流入 - 费用 - 下一刻仓位价值 
                 short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
 
-         # 计算总收益
-        self.reward = long_reward + short_reward
+        
+        if long_position == 0 and self.previous_long_position ==0 and long_position == 0 and self.previous_long_position ==0 and self.action_mode == "long":
+            self.reward = (abs(previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-1
+        else:   
+            # 计算总收益
+            self.reward = long_reward + short_reward
         self.reward_history.append(self.reward)
         
         # 更新持仓记录
@@ -460,7 +460,8 @@ class Training_Env(Testing_Env):
         back_time_length=back_time_length,
         max_holding_number=max_holding_number,
         num_action=2,  
-        actions = [],      
+        actions = [],   
+        action_mode="long",   
         initial_action =0,
        
     ):
@@ -479,7 +480,7 @@ class Training_Env(Testing_Env):
         """
         super(Training_Env,
               self).__init__(df, tech_indicator_list, tech_indicator_list_trend, transcation_cost,
-                             back_time_length, max_holding_number, actions, initial_action)
+                             back_time_length, max_holding_number, actions, action_mode, initial_action)
         if q_table_dict.get(df_path,None) is None:            
             # 构建 Q 表（用于强化学习策略优化）
             q_table_dict[df_path] = make_q_table_reward(df,

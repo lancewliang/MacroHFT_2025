@@ -42,6 +42,7 @@ def make_q_table_reward(df: pd.DataFrame,
                         reward_scale=1000,
                         gamma=0.999,
                         commission_fee=0.001,
+                        action_mode="long",
                         max_punish=1e12):
     """
     Generate Q-table rewards with bilingual comments
@@ -158,7 +159,11 @@ def make_q_table_reward(df: pd.DataFrame,
                     # 10*2 -10.2 -10*1 ping = -0.2
                     # 10*2 -10.2 -11*1 zhang = -1.2
                     # 10*2 -10.2 -9*1 die = 0.8
-                total_reward = long_reward + short_reward
+                if current_short_action ==0 and previous_short_action ==0 and current_long_action ==0 and previous_long_action ==0 and action_mode == "both":
+                    total_reward = abs(current_price_information['close']-future_price_information['close'])*max_holding*-1
+                else:   
+                    # 计算总收益             
+                    total_reward = long_reward + short_reward
                 total_reward = reward_scale * total_reward
                     
                 q_table[len(df) - t][previous_action_index][current_action_index] = total_reward + gamma * np.max(q_table[len(df) - t + 1][current_action_index][:])

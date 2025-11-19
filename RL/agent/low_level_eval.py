@@ -45,12 +45,12 @@ def _validate_worker(args):
         tuple: 验证结果 (action_list_episode, reward_list_episode, final_balance, required_money, commission_fee)
     """
     # 解包参数
-    (n_state_1, n_state_2, actions, n_action, device, val_data_path, 
+    (n_state_1, n_state_2, actions, action_mode,n_action, device, val_data_path, 
      tech_indicator_list, tech_indicator_list_trend, transcation_cost,
      back_time_length, max_holding_number, epoch_path, df_id, initial_action) = args
     
     # 创建EVALER实例
-    evaler = EVALER(n_state_1, n_state_2, actions, n_action, device,
+    evaler = EVALER(n_state_1, n_state_2, actions, action_mode, n_action, device,
                    val_data_path, tech_indicator_list, tech_indicator_list_trend,
                    transcation_cost, back_time_length, max_holding_number)
     
@@ -58,7 +58,7 @@ def _validate_worker(args):
     return evaler.val_cluster(epoch_path, df_id, initial_action)
 
 class EVALER(object):
-    def __init__(self, n_state_1,n_state_2, actions, n_action, device,
+    def __init__(self, n_state_1,n_state_2, actions, action_mode, n_action, device,
                  val_data_path,
                  tech_indicator_list,
                  tech_indicator_list_trend,
@@ -68,7 +68,7 @@ class EVALER(object):
                  ):  
         self.device = torch.device(device) 
         self.val_data_path = val_data_path
-        self.eval_net = subagent(n_state_1, n_state_2, n_action, 128).to(self.device)
+        self.eval_net = subagent(n_state_1, n_state_2, n_action, 512).to(self.device)
 
         self.tech_indicator_list=tech_indicator_list
         self.tech_indicator_list_trend=tech_indicator_list_trend
@@ -76,6 +76,7 @@ class EVALER(object):
         self.back_time_length=back_time_length
         self.max_holding_number=max_holding_number
         self.actions = actions
+        self.action_mode = action_mode
         
     def test_select_action(self, state, state_trend, info):
         """
@@ -126,6 +127,7 @@ class EVALER(object):
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
                 actions=self.actions,
+                action_mode = self.action_mode,
                 initial_action=initial_action)
         # 重置环境获取初始状态 / Reset environment to get initial state
         single_state, trend_state, info = val_env.reset()
