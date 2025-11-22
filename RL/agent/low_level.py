@@ -79,7 +79,7 @@ from env.low_level_env import Testing_Env, Training_Env
 from RL.util.utili import get_ada, get_epsilon, LinearDecaySchedule
 from RL.util.replay_buffer import ReplayBuffer
 from RL.agent.low_level_eval import DQN_EVAL
-from env.actions import long_actions,short_actions,short_and_long_actions
+from env.actions import get_actions
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -90,13 +90,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=1200000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=100)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
+parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=50)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=1e-7)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.1)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=15)  # 探索衰减周期 / Exploration decay length
-parser.add_argument("--update_times",type=int,default=20)  # 单步更新次数 / Update times per step
+parser.add_argument("--update_times",type=int,default=25)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.999)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
 parser.add_argument("--transcation_cost",type=float,default=4.0/10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
@@ -110,6 +110,7 @@ parser.add_argument("--alpha",type=float,default=1)  # KL损失权重系数 / KL
 parser.add_argument("--exp",type=str,default="exp4")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 parser.add_argument("--action_mode",type=str,default="long")  # 动作方向
+parser.add_argument("--action_size",type=int,default=2)  # 动作方向
         
 def seed_torch(seed):
     random.seed(seed)
@@ -202,14 +203,9 @@ class DQN(object):
 
 
         self.action_mode = args.action_mode
-        if self.action_mode == 'long':
-            self.actions = long_actions
-        elif self.action_mode == 'short':
-            self.actions = short_actions
-        elif self.action_mode == 'both':
-            self.actions = short_and_long_actions
-        else:
-            raise Exception ("we do not support other action mode yet")
+        self.actions, self.n_action, self.action_type = get_actions(self.action_mode, args.action_size)
+        
+            
 
         self.transcation_cost = args.transcation_cost
         self.back_time_length = args.back_time_length

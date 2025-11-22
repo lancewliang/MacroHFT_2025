@@ -70,7 +70,11 @@ def make_q_table_reward(df: pd.DataFrame,
     #     return -price_information["close"] * position
 
     # scale_factor = num_action - 1
-    scale_factor = 2 - 1
+    # if action_mode == "both":
+    #     scale_factor = (num_action - 1)/2
+    # else:
+    #     scale_factor = num_action - 1
+    scale_factor = 1
 
     for t in range(2, len(df) + 1):
         current_price_information = df.iloc[-t]
@@ -161,6 +165,7 @@ def make_q_table_reward(df: pd.DataFrame,
                     # 10*2 -10.2 -9*1 die = 0.8
                 if current_short_action ==0 and previous_short_action ==0 and current_long_action ==0 and previous_long_action ==0 and action_mode == "both":
                     total_reward = abs(current_price_information['close']-future_price_information['close'])*max_holding*-1
+                    total_reward = current_price_information['close']*-0.001
                 else:   
                     # 计算总收益             
                     total_reward = long_reward + short_reward
