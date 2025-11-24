@@ -248,7 +248,7 @@ class Testing_Env(gym.Env):
         # 计算多头仓位变化带来的收益
         long_reward = 0
         short_reward = 0
-        
+        scale_factor = 2
         
         if previous_long_position < long_position:
             # 处理买入操作

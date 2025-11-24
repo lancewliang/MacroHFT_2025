@@ -74,7 +74,7 @@ def make_q_table_reward(df: pd.DataFrame,
     #     scale_factor = (num_action - 1)/2
     # else:
     #     scale_factor = num_action - 1
-    scale_factor = 1
+    scale_factor = 2
 
     for t in range(2, len(df) + 1):
         current_price_information = df.iloc[-t]

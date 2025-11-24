@@ -90,27 +90,27 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=1200000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=100)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
+parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=50)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=1e-7)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.1)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=15)  # 探索衰减周期 / Exploration decay length
-parser.add_argument("--update_times",type=int,default=25)  # 单步更新次数 / Update times per step
+parser.add_argument("--update_times",type=int,default=20)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.999)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
 parser.add_argument("--transcation_cost",type=float,default=4.0/10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=6234571)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=17)  # 训练轮次数 / Training epochs
+parser.add_argument("--epoch_number",type=int,default=10)  # 训练轮次数 / Training epochs
 parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
 parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
 parser.add_argument("--alpha",type=float,default=1)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--exp",type=str,default="exp4")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 parser.add_argument("--action_mode",type=str,default="long")  # 动作方向
-parser.add_argument("--action_size",type=int,default=2)  # 动作方向
+parser.add_argument("--action_size",type=int,default=2)  # 动作数量
         
 def seed_torch(seed):
     random.seed(seed)
@@ -203,9 +203,13 @@ class DQN(object):
 
 
         self.action_mode = args.action_mode
-        self.actions, self.n_action, self.action_type = get_actions(self.action_mode, args.action_size)
+        self.actions, self.n_action, self.action_type_desc = get_actions(self.action_mode, args.action_size)
         
-            
+        log.info(f"self.actions:{self.actions}")
+        log.info(f"self.n_action:{self.n_action}")
+        log.info(f"self.action_type_desc:{self.action_type_desc}")
+
+
 
         self.transcation_cost = args.transcation_cost
         self.back_time_length = args.back_time_length

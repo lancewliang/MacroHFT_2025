@@ -94,15 +94,15 @@ def get_actions(action_mode="both", size=1):
     return actions, n_actions, action_type
 
 # # 更新示例用法以测试size参数
-# if __name__ == "__main__":
-#     # 测试不同size参数
-#     print("=== 测试size参数功能 ===")
-#     for size_val in [1, 2]:
-#         print(f"\nsize={size_val} 时的动作列表:")
-#         for mode in ["long", "short", "both"]:
-#             actions, n_actions, action_type = get_actions(mode, size=size_val)
-#             print(f"动作模式: {mode}")
-#             print(f"动作类型: {action_type}")
-#             print(f"动作数量: {n_actions}")
-#             print(f"动作列表: {actions}")
-#             print("-" * 30)
+if __name__ == "__main__":
+    # 测试不同size参数
+    print("=== 测试size参数功能 ===")
+    for size_val in [2]:
+        print(f"\nsize={size_val} 时的动作列表:")
+        for mode in ["long", "short", "both"]:
+            actions, n_actions, action_type = get_actions(mode, size=size_val)
+            print(f"动作模式: {mode}")
+            print(f"动作类型: {action_type}")
+            print(f"动作数量: {n_actions}")
+            print(f"动作列表: {actions}")
+            print("-" * 30)
