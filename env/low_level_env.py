@@ -248,7 +248,7 @@ class Testing_Env(gym.Env):
         # 计算多头仓位变化带来的收益
         long_reward = 0
         short_reward = 0
-        scale_factor = 2
+        scale_factor = 1
         
         if previous_long_position < long_position:
             # 处理买入操作
@@ -355,11 +355,11 @@ class Testing_Env(gym.Env):
 
         
         if long_position == 0 and self.previous_long_position ==0 and long_position == 0 and self.previous_long_position ==0 and self.action_mode == "both":
-            # self.reward = (abs(previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-1
-            self.reward = previous_price_information['close']*-0.001
+            self.reward = (abs(previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-0.5/scale_factor
+            
         else:   
             # 计算总收益
-            self.reward = long_reward + short_reward
+            self.reward = (long_reward + short_reward)/scale_factor
         self.reward_history.append(self.reward)
         
         # 更新持仓记录
