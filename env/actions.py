@@ -97,9 +97,9 @@ def get_actions(action_mode="both", size=1):
 if __name__ == "__main__":
     # 测试不同size参数
     print("=== 测试size参数功能 ===")
-    for size_val in [2]:
+    for size_val in [1]:
         print(f"\nsize={size_val} 时的动作列表:")
-        for mode in ["long", "short", "both"]:
+        for mode in [ "both"]:
             actions, n_actions, action_type = get_actions(mode, size=size_val)
             print(f"动作模式: {mode}")
             print(f"动作类型: {action_type}")
