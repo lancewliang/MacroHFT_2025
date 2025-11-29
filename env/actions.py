@@ -25,10 +25,10 @@ short_actions = [
     
 ]
 
-short_and_long_actions = [
-    [0,0],
+short_and_long_actions = [   
     [0,1],
-    [1,0],     
+    [1,0],
+    [0,0],    
     [0,2],
     [2,0], 
     [0,3],   
