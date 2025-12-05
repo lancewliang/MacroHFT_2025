@@ -22,6 +22,8 @@ Run scripts/high_level.sh for meta-policy optimization.
 After 4 months of unremitting efforts, mainly due to the lack of computing power equipment, I finally successfully reproduced the test results of low-level and high-level in your paper. Thank you for releasing all the code, algorithms, and data. Sincere tribute.
 I will continue to try to improve some parts of this framework, including:
 --More actions, more position levels  （已经测试过了， 不太可能成功，由于先验经验一定是满仓最大优势，导致学习不到半仓的好处，除非更换奖励函数为夏普之类的长期奖励，暂时不作研究）
+  -- 0,1,2这种情况效果不好
+  -- -1,0,1这种情况也不好， 因为0不是最优解
 --Due to the low trading frequency in my testing results, （在没有持仓的时候增加了惩罚，交易频率上升了）
 --I tend to remove order data from the micro market for testing purposes
 --Use LSTM or Transformer to observe the effect at the model level 

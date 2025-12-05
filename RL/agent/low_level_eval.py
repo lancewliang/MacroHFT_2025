@@ -149,8 +149,10 @@ class EVALER(object):
             portfit_magine, final_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
         # 获取最终账户信息 / Get final account information
         final_balance = val_env.final_balance
-        required_money = val_env.required_money       
-        return action_list_episode, reward_list_episode ,final_balance, required_money, commission_fee
+        required_money = val_env.required_money 
+        step_times = val_env.step_times   
+        trade_id_counter = len(val_env.trade_records)
+        return action_list_episode, reward_list_episode ,final_balance, required_money, commission_fee, step_times, trade_id_counter
     
 class DQN_EVAL(object):
     def __init__(self, n_state_1,n_state_2,actions ,action_mode,n_action,device,
@@ -283,8 +285,8 @@ class DQN_EVAL(object):
             
             # 收集结果
             for result in results:
-                action_list_episode, reward_list_episode, final_balance, required_money, commission_fee = result
-                log.info(f"val _validate_worker  final_balance: {final_balance}, required_money: {required_money}, commission_fee: {commission_fee}")
+                action_list_episode, reward_list_episode, final_balance, required_money, commission_fee, step_times, trade_id_counter = result
+                log.info(f"val _validate_worker  final_balance: {final_balance}, required_money: {required_money}, commission_fee: {commission_fee}, step_times: {step_times}, trade_id_counter: {trade_id_counter}")
                 action_list.append(action_list_episode)
                 reward_list.append(reward_list_episode)
                 final_balance_list.append(final_balance)
