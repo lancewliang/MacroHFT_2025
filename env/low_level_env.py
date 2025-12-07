@@ -591,11 +591,14 @@ class Training_Env(Testing_Env):
         """
         single_state, trend_state, info = super(Training_Env, self).reset()
         # 初始化交易状态
-        self.previous_action = self.initial_action
+        
         self.previous_long_position = self.initial_long_action * self.max_holding_number
         self.long_position = self.initial_long_action * self.max_holding_number
+        self.previous_short_position = self.initial_short_action * self.max_holding_number
+        self.short_position = self.initial_short_action * self.max_holding_number         
+        
         # 从 Q 表获取初始 Q 值
-        info['q_value'] = self.q_table[self.m - 1][self.previous_action][:]
+        info['q_value'] = self.q_table[self.m - 1][self.initial_action][:]
         return single_state, trend_state, info
 
     def step(self, action):

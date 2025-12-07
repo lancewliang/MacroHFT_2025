@@ -24,7 +24,7 @@ from RL.util.replay_buffer import ReplayBuffer_High
 from RL.util.memory import episodicmemory
 from RL.util.eval_tools import calculate_trading_metrics
 from RL.util.graph_utils import plot_money_curve
-
+from env.actions import get_actions
 
 
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -33,30 +33,31 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=1200000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
-parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
+parser.add_argument("--q_value_memorize_freq",type=int, default=100)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
-parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
+parser.add_argument("--eval_update_freq",type=int,default=128)  # 网络更新频率 / Network update frequency
+parser.add_argument("--lr", type=float, default=1e-7)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
-parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
+parser.add_argument("--decay_length",type=int,default=15)  # 探索衰减周期 / Exploration decay length
 parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
-parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
+parser.add_argument("--gamma", type=float, default=0.999)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=2.0 / 100000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=5.0 / 100000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
-parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
+parser.add_argument("--seed",type=int,default=345129)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
-parser.add_argument("--device",type=str,default="cpu")  # 计算设备 / Computation device cuda:0
-parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
+parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
+parser.add_argument("--beta",type=int,default=1) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--no_risk_return",type=float,default=4.5) #无风险返回率
 parser.add_argument("--exp",type=str,default="exp1")
 parser.add_argument("--num_step",type=int,default=10)
-
+parser.add_argument("--action_mode",type=str,default="long")  # 动作方向
+parser.add_argument("--action_size",type=int,default=1)  # 动作数量
 
 def seed_torch(seed):
     random.seed(seed)
@@ -78,8 +79,7 @@ class DQN(object):
         else:
             self.device = torch.device("cpu")
             
-
-        self.epsilon_device = torch.device("cpu") 
+ 
         self.logs_dir = os.path.join("./logs/high_level", '{}'.format(args.dataset), args.exp)
         os.makedirs(self.logs_dir, exist_ok=True) 
         
@@ -120,33 +120,49 @@ class DQN(object):
         self.tech_indicator_list_trend = np.load('./data/feature_list/trend_features.npy', allow_pickle=True).tolist()
         self.clf_list = ['slope_360', 'vol_360']  # 趋势  波动 分类
 
+        self.action_mode = args.action_mode
+        self.actions, self.n_action, self.action_type_desc = get_actions(self.action_mode, args.action_size)
+        
+        log.info(f"self.actions:{self.actions}")
+        log.info(f"self.n_action:{self.n_action}")
+        log.info(f"self.action_type_desc:{self.action_type_desc}")
+        
         self.transcation_cost = args.transcation_cost
         self.back_time_length = args.back_time_length
-        self.n_action = 2
+ 
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
-        self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
-        self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
-        self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
-        self.vol_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
-        self.vol_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
-        self.vol_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)        
-        model_list_slope = [
-            "./result/low_level/ETHUSDT/best_model/slope/1/best_model.pkl", 
-            "./result/low_level/ETHUSDT/best_model/slope/2/best_model.pkl",
-            "./result/low_level/ETHUSDT/best_model/slope/3/best_model.pkl"
-        ]
-        model_list_vol = [
-            "./result/low_level/ETHUSDT/best_model/vol/1/best_model.pkl",
-            "./result/low_level/ETHUSDT/best_model/vol/2/best_model.pkl",
-            "./result/low_level/ETHUSDT/best_model/vol/3/best_model.pkl"
-        ]
-        self.slope_1.load_state_dict(torch.load(model_list_slope[0], map_location=self.epsilon_device))
-        self.slope_2.load_state_dict(torch.load(model_list_slope[1], map_location=self.epsilon_device))
-        self.slope_3.load_state_dict(torch.load(model_list_slope[2], map_location=self.epsilon_device))
-        self.vol_1.load_state_dict(torch.load(model_list_vol[0], map_location=self.epsilon_device))
-        self.vol_2.load_state_dict(torch.load(model_list_vol[1], map_location=self.epsilon_device))
-        self.vol_3.load_state_dict(torch.load(model_list_vol[2], map_location=self.epsilon_device))
+        self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)
+        self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)
+        self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)
+        self.vol_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)
+        self.vol_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)
+        self.vol_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)     
+        if self.action_mode == "long":
+             
+            model_list_slope = [
+                "./result/low_level/ETHUSDT/long_action/best_model/slope/1/best_model.pkl", 
+                "./result/low_level/ETHUSDT/long_action/best_model/slope/2/best_model.pkl",
+                "./result/low_level/ETHUSDT/long_action/best_model/slope/3/best_model.pkl"
+            ]
+            model_list_vol = [
+                "./result/low_level/ETHUSDT/long_action/best_model/vol/1/best_model.pkl",
+                "./result/low_level/ETHUSDT/long_action/best_model/vol/2/best_model.pkl",
+                "./result/low_level/ETHUSDT/long_action/best_model/vol/3/best_model.pkl"
+            ]
+        elif self.action_mode == "long":
+            pass        
+        
+        elif self.action_mode == "both":
+            pass
+        log.info(f"self.model_list_slope:{model_list_slope}")
+        log.info(f"self.model_list_vol:{model_list_vol}")
+        self.slope_1.load_state_dict(torch.load(model_list_slope[0], map_location=self.device))
+        self.slope_2.load_state_dict(torch.load(model_list_slope[1], map_location=self.device))
+        self.slope_3.load_state_dict(torch.load(model_list_slope[2], map_location=self.device))
+        self.vol_1.load_state_dict(torch.load(model_list_vol[0], map_location=self.device))
+        self.vol_2.load_state_dict(torch.load(model_list_vol[1], map_location=self.device))
+        self.vol_3.load_state_dict(torch.load(model_list_vol[2], map_location=self.device))
         self.slope_1.eval()
         self.slope_2.eval()
         self.slope_3.eval()
@@ -163,12 +179,11 @@ class DQN(object):
             1: self.vol_2,
             2: self.vol_3
         }
-        self.epsilon_hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.epsilon_device)
-        self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
-        self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
+ 
+        self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32*4).to(self.device)
+        self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32*4).to(self.device)
         self.hyperagent_target.load_state_dict(self.hyperagent.state_dict())
-        self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
-        self.epsilon_hyperagent.eval()
+
         self.update_times = args.update_times
         self.optimizer = torch.optim.Adam(self.hyperagent.parameters(), lr=args.lr)
         self.loss_func = nn.MSELoss()
@@ -183,7 +198,7 @@ class DQN(object):
         self.decay_length = args.decay_length
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
-        self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, 64, self.epsilon_device)
+        self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, 64*4, self.device)
         self.no_risk_return = args.no_risk_return
 
 
@@ -223,21 +238,27 @@ class DQN(object):
 
         # Compute Q-values from slope/volatility agents
         # 计算斜率/波动率代理的Q值
+        batch_state = batch['state'].to(self.device)
+        batch_state_trend= batch['state_trend'].to(self.device)
+        batch_previous_action= batch['previous_action'].to(self.device)
+        batch_next_state = batch['next_state'].to(self.device)
+        batch_next_state_trend= batch['next_state_trend'].to(self.device)
+        batch_next_previous_action= batch['next_previous_action'].to(self.device)
         qs_current = [
-                    self.slope_agents[0](batch['state'], batch['state_trend'], batch['previous_action']),
-                    self.slope_agents[1](batch['state'], batch['state_trend'], batch['previous_action']),
-                    self.slope_agents[2](batch['state'], batch['state_trend'], batch['previous_action']),
-                    self.vol_agents[0](batch['state'], batch['state_trend'], batch['previous_action']),
-                    self.vol_agents[1](batch['state'], batch['state_trend'], batch['previous_action']),
-                    self.vol_agents[2](batch['state'], batch['state_trend'], batch['previous_action'])
+                    self.slope_agents[0](batch_state, batch_state_trend, batch_previous_action).to(self.device),
+                    self.slope_agents[1](batch_state, batch_state_trend, batch_previous_action).to(self.device),
+                    self.slope_agents[2](batch_state, batch_state_trend, batch_previous_action).to(self.device),
+                    self.vol_agents[0](batch_state, batch_state_trend, batch_previous_action).to(self.device),
+                    self.vol_agents[1](batch_state, batch_state_trend, batch_previous_action).to(self.device),
+                    self.vol_agents[2](batch_state, batch_state_trend, batch_previous_action).to(self.device)
         ]
         qs_next = [
-                    self.slope_agents[0](batch['next_state'], batch['next_state_trend'], batch['next_previous_action']),
-                    self.slope_agents[1](batch['next_state'], batch['next_state_trend'], batch['next_previous_action']),
-                    self.slope_agents[2](batch['next_state'], batch['next_state_trend'], batch['next_previous_action']),
-                    self.vol_agents[0](batch['next_state'], batch['next_state_trend'], batch['next_previous_action']),
-                    self.vol_agents[1](batch['next_state'], batch['next_state_trend'], batch['next_previous_action']),
-                    self.vol_agents[2](batch['next_state'], batch['next_state_trend'], batch['next_previous_action'])
+                    self.slope_agents[0](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
+                    self.slope_agents[1](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
+                    self.slope_agents[2](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
+                    self.vol_agents[0](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
+                    self.vol_agents[1](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
+                    self.vol_agents[2](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device)
         ]
         # Calculate Q distribution and gather selected actions
         # 计算Q分布并收集选定动作
@@ -292,10 +313,10 @@ class DQN(object):
         """
         # Convert input data to PyTorch tensors and move to target device
         # 转换输入数据为张量并移动到目标设备
-        x1 = torch.FloatTensor(state).to(self.epsilon_device)
-        x2 = torch.FloatTensor(state_trend).to(self.epsilon_device)
-        x3 = torch.FloatTensor(state_clf).unsqueeze(0).to(self.epsilon_device)
-        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.epsilon_device), 0).to(self.epsilon_device)
+        x1 = torch.FloatTensor(state).to(self.device)
+        x2 = torch.FloatTensor(state_trend).to(self.device)
+        x3 = torch.FloatTensor(state_clf).unsqueeze(0).to(self.device)
+        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.device), 0).to(self.device)
         
         # Epsilon-greedy action selection
         # epsilon-greedy策略选择动作
@@ -372,10 +393,10 @@ class DQN(object):
         """
         # Convert input data to PyTorch tensors and move to target device
         # 转换输入数据为张量并移动到目标设备
-        x1 = torch.FloatTensor(state).to(self.epsilon_device)
-        x2 = torch.FloatTensor(state_trend).to(self.epsilon_device)
-        x3 = torch.FloatTensor(state_clf).unsqueeze(0).to(self.epsilon_device)
-        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.epsilon_device),0).to(self.epsilon_device)
+        x1 = torch.FloatTensor(state).to(self.device)
+        x2 = torch.FloatTensor(state_trend).to(self.device)
+        x3 = torch.FloatTensor(state_clf).unsqueeze(0).to(self.device)
+        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.device),0).to(self.device)
         
         # Get Q-values from slope/volatility agents
         # 获取斜率/波动率代理的Q值
@@ -390,7 +411,7 @@ class DQN(object):
         ]
         # Calculate hypernetwork output
         # 计算超网络输出
-        w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
+        w = self.hyperagent(x1, x2, x3, previous_action)
         # 形状[1,6]， 6个 子网络的权重，
         # Combine Q-values using hypernetwork weights
         # 使用超网络权重组合Q值  
@@ -415,13 +436,13 @@ class DQN(object):
         """
         # Convert input data to PyTorch tensors and move to target device
         # 转换输入数据为张量并移动到目标设备
-        x1 = torch.FloatTensor(state).to(self.epsilon_device)
-        x2 = torch.FloatTensor(state_trend).to(self.epsilon_device)
-        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.epsilon_device), 0).to(self.epsilon_device)
+        x1 = torch.FloatTensor(state).to(self.device)
+        x2 = torch.FloatTensor(state_trend).to(self.device)
+        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.device), 0).to(self.device)
         with torch.no_grad():
             # Encode to get hidden state representation
             # 编码获取隐藏状态表示
-            hs = self.epsilon_hyperagent.encode(x1, x2, previous_action).cpu().numpy()
+            hs = self.hyperagent.encode(x1, x2, previous_action).cpu().numpy()
         return hs
     
     
@@ -463,7 +484,9 @@ class DQN(object):
                 transcation_cost=self.transcation_cost,
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
-                n_action = self.n_action,
+                num_action = self.n_action,
+                actions = self.actions,   
+                action_mode=self.action_mode,  
                 initial_action=random.choices(range(self.n_action), k=1)[0],
                 alpha = 0)
         single_state, trend_state, clf_state, info = train_env.reset()
@@ -521,18 +544,15 @@ class DQN(object):
                         self.writer.add_scalar(tag="KL_loss", scalar_value=KL_loss, global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_eval", scalar_value=q_eval, global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_target", scalar_value=q_target, global_step=self.update_counter, walltime=None)
-                self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
-                self.epsilon_hyperagent.to(self.epsilon_device)
+                
                 if step_counter > 4320:
                     # 定期重新编码记忆, 因为超代理的隐藏层训练后发生了变化，
                     # Periodically re-encode memory
-                    self.memory.re_encode(self.epsilon_hyperagent)
+                    self.memory.re_encode(self.hyperagent)
                 return_margin, final_balance, required_money, commission_fee = train_env.get_final_return_rate()                
                 log.info(f"update network {step_counter} return_margin:{return_margin:.2f},final_balance:{final_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
             
-            if done:
-                self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
-                self.epsilon_hyperagent.to(self.epsilon_device)
+            if done:       
                 log.info(f" train_env step done")
                 break
         episode_counter += 1
@@ -617,7 +637,7 @@ class DQN(object):
         best_return_rate = -float('inf')
         best_model = None
         
-        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) 
+        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) .head(2000)
         log.info(f"train data length: {len(self.df)}")
         # 初始化经验回放缓冲区
         # Initialize replay buffer for experience storage
@@ -663,7 +683,8 @@ class DQN(object):
                 # 保存最佳模型到文件
                 # Save best model to disk
 
-        
+        log.info(f"train done")
+        log.info(f"start  test_cluster")
         # 执行最终测试评估
         # Execute final test evaluation
         final_result_path = self.result_path
@@ -671,6 +692,7 @@ class DQN(object):
 
 
     def val_cluster(self, epoch_path, save_path):
+        log.info(f"val_cluster epoch_path:{epoch_path}")
         self.hyperagent.load_state_dict(
             torch.load(os.path.join(epoch_path, "trained_model.pkl")))
         self.hyperagent.eval()
@@ -680,7 +702,8 @@ class DQN(object):
         final_balance_list = []
         required_money_list = []
         commission_fee_list = []
-        self.df = pd.read_feather(os.path.join(self.val_data_path, "val.feather"))
+        self.df = pd.read_feather(os.path.join(self.val_data_path, "val.feather")).head(2000)
+        log.info(f"val data length: {len(self.df)}")
         
         val_env = Testing_Env(
                 df=self.df,
@@ -691,7 +714,9 @@ class DQN(object):
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
                 initial_action=0,
-                n_action = self.n_action)
+                actions = self.actions,   
+                action_mode=self.action_mode 
+                )
         s, s2, s3, info = val_env.reset()
         done = False
         action_list_episode = []
@@ -727,6 +752,14 @@ class DQN(object):
         return return_rate
 
     def test_cluster(self, epoch_path, save_path):
+        self.slope_agents[0] = self.slope_agents[0].to(self.device)
+        self.slope_agents[1] = self.slope_agents[1].to(self.device)
+        self.slope_agents[2] = self.slope_agents[2].to(self.device)
+        self.vol_agents[0] = self.vol_agents[0].to(self.device)
+        self.vol_agents[1] = self.vol_agents[1].to(self.device)
+        self.vol_agents[2] = self.vol_agents[2].to(self.device)
+ 
+        self.hyperagent = self.hyperagent.to(self.device)
         self.hyperagent.load_state_dict(torch.load(epoch_path))
         self.hyperagent.eval()
         counter = False
@@ -748,17 +781,22 @@ class DQN(object):
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
                 initial_action=0,
-                n_action = self.n_action)
+                actions = self.actions,   
+                action_mode=self.action_mode )
         s, s2, s3, info = test_env.reset()
         done = False
         action_list_episode = []
         reward_list_episode = []
+        step_times = 0
         while not done:
             a = self.act_test(s, s2, s3, info)
             s_, s2_, s3_, r, done, info_ = test_env.step(a)
             reward_list_episode.append(r)
             s, s2, s3, info = s_, s2_, s3_, info_
             action_list_episode.append(a)
+            step_times += 1
+            if step_times%1000==0:
+                log.info(f"step_times:{step_times},a:{a},r:{r}")
         return_margin, final_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)    
         metrics = calculate_trading_metrics(self.df,test_env.trade_records, test_env.value_history, self.no_risk_return) 
       
@@ -848,7 +886,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
     agent = DQN(args)
-    # agent.train()
+    agent.train()
     final_result_path = os.path.join("./result/high_level", '{}'.format(agent.dataset))
     best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), 'best_model.pkl')
     agent.test_cluster(best_model_path, final_result_path)
