@@ -49,7 +49,7 @@ parser.add_argument("--transcation_cost",type=float,default=5.0 / 100000)  # 交
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=345129)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
+parser.add_argument("--epoch_number",type=int,default=10)  # 训练轮次数 / Training epochs
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=1) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
@@ -637,7 +637,7 @@ class DQN(object):
         best_return_rate = -float('inf')
         best_model = None
         
-        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) .head(2000)
+        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) 
         log.info(f"train data length: {len(self.df)}")
         # 初始化经验回放缓冲区
         # Initialize replay buffer for experience storage
@@ -684,7 +684,7 @@ class DQN(object):
                 # Save best model to disk
 
         log.info(f"train done")
-        log.info(f"start  test_cluster")
+        log.info(f"start  test_cluster best_model_path:{best_model_path},self.result_path:{self.result_path}")
         # 执行最终测试评估
         # Execute final test evaluation
         final_result_path = self.result_path
@@ -702,7 +702,7 @@ class DQN(object):
         final_balance_list = []
         required_money_list = []
         commission_fee_list = []
-        self.df = pd.read_feather(os.path.join(self.val_data_path, "val.feather")).head(2000)
+        self.df = pd.read_feather(os.path.join(self.val_data_path, "val.feather"))
         log.info(f"val data length: {len(self.df)}")
         
         val_env = Testing_Env(

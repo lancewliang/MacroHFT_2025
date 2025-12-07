@@ -539,7 +539,9 @@ class Testing_Env(gym.Env):
         #     balance_list.append(np.sum(true_money[:i + 1]))
         balance_list = np.cumsum(true_money)
         # 计算最大资金需求（历史最低余额的绝对值） （风险度量指标） 
-        required_money = -np.min(balance_list)
+        required_money = 0
+        if len(balance_list) > 0:
+            required_money = -np.min(balance_list)
         # 计算总手续费（注意：字段名存在拼写错误 comission -> commission）
         commission_fee = np.sum(self.comission_fee_history)
         # 返回相对收益率、净收益、最大资金需求、总手续费
