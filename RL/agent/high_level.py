@@ -150,11 +150,20 @@ class DQN(object):
                 "./result/low_level/ETHUSDT/long_action/best_model/vol/2/best_model.pkl",
                 "./result/low_level/ETHUSDT/long_action/best_model/vol/3/best_model.pkl"
             ]
-        elif self.action_mode == "long":
+        elif self.action_mode == "short":
             pass        
         
         elif self.action_mode == "both":
-            pass
+            model_list_slope = [
+                "./result/low_level/ETHUSDT/both_action/best_model/slope/1/best_model.pkl", 
+                "./result/low_level/ETHUSDT/both_action/best_model/slope/2/best_model.pkl",
+                "./result/low_level/ETHUSDT/both_action/best_model/slope/3/best_model.pkl"
+            ]
+            model_list_vol = [
+                "./result/low_level/ETHUSDT/long_action/best_model/vol/1/best_model.pkl",
+                "./result/low_level/ETHUSDT/long_action/best_model/vol/2/best_model.pkl",
+                "./result/low_level/ETHUSDT/long_action/best_model/vol/3/best_model.pkl"
+            ]
         log.info(f"self.model_list_slope:{model_list_slope}")
         log.info(f"self.model_list_vol:{model_list_vol}")
         self.slope_1.load_state_dict(torch.load(model_list_slope[0], map_location=self.device))
