@@ -30,8 +30,8 @@ def plot_money_curve(trade_records, value_history, df, save_path):
     print(trade_records)
     # 绘制价格曲线
     ax1.plot(df['timestamp'], df['close'], label='价格', color='gray')
-    ax1.set_xlabel('时间')
-    ax1.set_ylabel('价格', color='gray')
+    ax1.set_xlabel('time')
+    ax1.set_ylabel('price', color='gray')
     ax1.tick_params(axis='y', labelcolor='gray')
     
     # 在价格曲线上标记买卖点
@@ -40,13 +40,13 @@ def plot_money_curve(trade_records, value_history, df, save_path):
         buy_records = trade_records[trade_records['type'] == 'buy']
         if not buy_records.empty:
             ax1.scatter(buy_records['datetime'], buy_records['price'], 
-                       color='red', label='买入', s=50, alpha=0.7)
+                       color='red', label='buy', s=50, alpha=0.7)
         
         # 卖出点标记为蓝色
         sell_records = trade_records[trade_records['type'] == 'sell']
         if not sell_records.empty:
             ax1.scatter(sell_records['datetime'], sell_records['price'], 
-                       color='blue', label='卖出', s=50, alpha=0.7)
+                       color='blue', label='sell', s=50, alpha=0.7)
     
     # 创建第二个y轴用于资金价值
     ax2 = ax1.twinx()
@@ -60,9 +60,9 @@ def plot_money_curve(trade_records, value_history, df, save_path):
     
     # 绘制资金价值曲线
     ax2.plot(value_history.iloc[:, 0], value_history.iloc[:, 1], 
-                     label='资金价值', color='green')
+                     label='value', color='green')
     
-    ax2.set_ylabel('资金价值', color='green')
+    ax2.set_ylabel('value', color='green')
     ax2.tick_params(axis='y', labelcolor='green')
     
     # 添加图例
@@ -71,7 +71,7 @@ def plot_money_curve(trade_records, value_history, df, save_path):
     ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
     
     # 添加标题
-    plt.title('价格曲线与资金价值')
+    plt.title('price and value')
     
     # 调整布局
     fig.tight_layout()

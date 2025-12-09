@@ -285,7 +285,8 @@ class Testing_Env(gym.Env):
             self.buy_size = long_position - previous_long_position # 计算买入数量
             # 计算买入所需资金（包含手续费）
             needed_cash = self.buy_size * previous_price_information['close'] * (1 + self.comission_fee)
-            self.comission_fee_history.append(self.comission_fee * self.buy_size * previous_price_information['close']) # 记录交易成本
+            commission_fee_amount = self.comission_fee * self.buy_size * previous_price_information['close']
+            self.comission_fee_history.append(commission_fee_amount) # 记录交易成本
             # 更新资金记录
             self.needed_money_memory.append(needed_cash)  # 买入支出
             self.sell_money_memory.append(0) # 卖出收入
@@ -308,6 +309,7 @@ class Testing_Env(gym.Env):
                     'amount': needed_cash,
                     'quantity': self.buy_size,
                     'direction': 'long',
+                    'commission_fee': commission_fee_amount,
                     'type': 'buy',                     
                     'price': previous_price_information['close']
                 }
@@ -324,7 +326,8 @@ class Testing_Env(gym.Env):
             self.sell_size = previous_long_position - long_position
             # 计算卖出收入（扣除手续费）
             cash = self.sell_size * previous_price_information['close'] * (1 - self.comission_fee)
-            self.comission_fee_history.append(self.comission_fee * self.sell_size * previous_price_information['close']) # 记录交易成本
+            commission_fee_amount = self.comission_fee * self.sell_size * previous_price_information['close']
+            self.comission_fee_history.append(commission_fee_amount) # 记录交易成本
             # 更新资金记录
             self.sell_money_memory.append(cash) # 卖出收入
             self.needed_money_memory.append(0) # 买入支出
@@ -337,6 +340,7 @@ class Testing_Env(gym.Env):
                     'amount': cash,
                     'quantity': self.sell_size,
                     'direction': 'long',
+                    'commission_fee': commission_fee_amount,
                     'type': 'sell',                     
                     'price': previous_price_information['close']
                 }
@@ -372,6 +376,7 @@ class Testing_Env(gym.Env):
                     'amount': cash_out,
                     'quantity': open_size,
                     'direction': 'short',
+                    'commission_fee': commission_fee_amount,
                     'type': 'sell',                     
                     'price': previous_price_information['close']
                 }
@@ -407,6 +412,7 @@ class Testing_Env(gym.Env):
                     'amount': cash_in,
                     'quantity': close_size,
                     'direction': 'short',
+                    'commission_fee': commission_fee_amount,
                     'type': 'buy',                     
                     'price': previous_price_information['close']
                 }
@@ -460,6 +466,7 @@ class Testing_Env(gym.Env):
                         'amount': cash,
                         'quantity': self.sell_size,
                         'direction': 'long',
+                        'commission_fee': commission_fee_amount,
                         'type': 'sell',                     
                         'price': previous_price_information['close']
                     }
@@ -483,6 +490,7 @@ class Testing_Env(gym.Env):
                         'amount': cash_in,
                         'quantity': close_size,
                         'direction': 'short',
+                        'commission_fee': commission_fee_amount,
                         'type': 'buy',                     
                         'price': previous_price_information['close']
                     }

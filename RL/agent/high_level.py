@@ -38,19 +38,19 @@ parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 /
 parser.add_argument("--q_value_memorize_freq",type=int, default=100)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=128)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=1e-7)  # 学习率 / Learning rate
+parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
-parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
+parser.add_argument("--epsilon_end",type=float,default=0.1)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=15)  # 探索衰减周期 / Exploration decay length
-parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
+parser.add_argument("--update_times",type=int,default=20)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.999)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
 parser.add_argument("--transcation_cost",type=float,default=5.0 / 100000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=345129)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=10)  # 训练轮次数 / Training epochs
-parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
+parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
+parser.add_argument("--alpha",type=float,default=5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=1) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--no_risk_return",type=float,default=4.5) #无风险返回率
@@ -86,7 +86,7 @@ class DQN(object):
         config_log(self.logs_dir,pfx='')
         log.info(args)    
             
-            
+        self.exp = args.exp
         self.result_path = os.path.join("./result/high_level", '{}'.format(args.dataset), args.exp)
         self.model_path = os.path.join(self.result_path, "seed_{}".format(self.seed))
         self.train_data_path = os.path.join(ROOT, "MacroHFT", "data", args.dataset, "whole")
@@ -160,9 +160,9 @@ class DQN(object):
                 "./result/low_level/ETHUSDT/both_action/best_model/slope/3/best_model.pkl"
             ]
             model_list_vol = [
-                "./result/low_level/ETHUSDT/long_action/best_model/vol/1/best_model.pkl",
-                "./result/low_level/ETHUSDT/long_action/best_model/vol/2/best_model.pkl",
-                "./result/low_level/ETHUSDT/long_action/best_model/vol/3/best_model.pkl"
+                "./result/low_level/ETHUSDT/both_action/best_model/vol/1/best_model.pkl",
+                "./result/low_level/ETHUSDT/both_action/best_model/vol/2/best_model.pkl",
+                "./result/low_level/ETHUSDT/both_action/best_model/vol/3/best_model.pkl"
             ]
         log.info(f"self.model_list_slope:{model_list_slope}")
         log.info(f"self.model_list_vol:{model_list_vol}")
@@ -689,6 +689,7 @@ class DQN(object):
                 best_model = self.hyperagent.state_dict()
                 best_model_path = os.path.join(self.result_path, 'best_model.pkl')
                 torch.save(best_model, best_model_path)
+                log.info(f"best train eval return_rate_eval:{return_rate_eval} epoch_path:{epoch_path}")
                 # 保存最佳模型到文件
                 # Save best model to disk
 
@@ -737,8 +738,8 @@ class DQN(object):
             s, s2, s3, info = s_, s2_, s3_, info_
             action_list_episode.append(a)
         return_margin, final_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
-          
-        log.info(f"val return_margin:{return_margin:.2f},final_balance:{final_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
+        trade_records_len = len(val_env.trade_records)
+        log.info(f"val return_margin:{return_margin:.2f},final_balance:{final_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f},trade_records count:{trade_records_len}")
      
         
         final_balance = val_env.final_balance
@@ -896,6 +897,6 @@ if __name__ == "__main__":
     print(args)
     agent = DQN(args)
     agent.train()
-    final_result_path = os.path.join("./result/high_level", '{}'.format(agent.dataset))
-    best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), 'best_model.pkl')
-    agent.test_cluster(best_model_path, final_result_path)
+    final_result_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), agent.exp)
+    best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), agent.exp, 'best_model.pkl')
+    #agent.test_cluster(best_model_path, final_result_path)
