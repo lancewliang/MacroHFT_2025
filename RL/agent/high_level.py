@@ -50,9 +50,9 @@ parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长�
 parser.add_argument("--seed",type=int,default=345129)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
-parser.add_argument("--alpha",type=float,default=5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
+parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
-parser.add_argument("--beta",type=int,default=1) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
+parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--no_risk_return",type=float,default=4.5) #无风险返回率
 parser.add_argument("--exp",type=str,default="exp1")
 parser.add_argument("--num_step",type=int,default=10)
@@ -151,8 +151,16 @@ class DQN(object):
                 "./result/low_level/ETHUSDT/long_action/best_model/vol/3/best_model.pkl"
             ]
         elif self.action_mode == "short":
-            pass        
-        
+            model_list_slope = [
+                "./result/low_level/ETHUSDT/short_action/best_model/slope/1/best_model.pkl", 
+                "./result/low_level/ETHUSDT/short_action/best_model/slope/2/best_model.pkl",
+                "./result/low_level/ETHUSDT/short_action/best_model/slope/3/best_model.pkl"
+            ]
+            model_list_vol = [
+                "./result/low_level/ETHUSDT/short_action/best_model/vol/1/best_model.pkl",
+                "./result/low_level/ETHUSDT/short_action/best_model/vol/2/best_model.pkl",
+                "./result/low_level/ETHUSDT/short_action/best_model/vol/3/best_model.pkl"
+            ]    
         elif self.action_mode == "both":
             model_list_slope = [
                 "./result/low_level/ETHUSDT/both_action/best_model/slope/1/best_model.pkl", 
