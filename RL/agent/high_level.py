@@ -35,10 +35,10 @@ os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=1100000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
-parser.add_argument("--q_value_memorize_freq",type=int, default=100)  # Q值记忆频率 / Q-value logging frequency
+parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
-parser.add_argument("--eval_update_freq",type=int,default=256)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
+parser.add_argument("--eval_update_freq",type=int,default=128)  # 网络更新频率 / Network update frequency
+parser.add_argument("--lr", type=float, default=1e-6)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=15)  # 探索衰减周期 / Exploration decay length
@@ -132,12 +132,13 @@ class DQN(object):
  
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
-        self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)
-        self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)
-        self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)
-        self.vol_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)
-        self.vol_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)
-        self.vol_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, 512).to(self.device)     
+        low_level_hidden_dim = 64  #*8
+        self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
+        self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
+        self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
+        self.vol_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
+        self.vol_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
+        self.vol_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)     
         if self.action_mode == "long":
              
             model_list_slope = [
@@ -196,9 +197,9 @@ class DQN(object):
             1: self.vol_2,
             2: self.vol_3
         }
- 
-        self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32*4).to(self.device)
-        self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32*4).to(self.device)
+        high_level_hidden_dim = 32  #*4
+        self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
+        self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
         self.hyperagent_target.load_state_dict(self.hyperagent.state_dict())
 
         self.update_times = args.update_times
@@ -215,7 +216,8 @@ class DQN(object):
         self.decay_length = args.decay_length
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
-        self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, 64*4, self.device)
+        episodicmemory_dim = 64 #*4
+        self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, episodicmemory_dim, self.device)
         self.no_risk_return = args.no_risk_return
 
 
