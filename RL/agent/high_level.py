@@ -2,7 +2,9 @@ import pathlib
 import sys
 import random
 import argparse
-
+import queue
+import threading
+import shutil
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -25,7 +27,38 @@ from RL.util.memory import episodicmemory
 from RL.util.eval_tools import calculate_trading_metrics
 from RL.util.graph_utils import plot_money_curve
 from env.actions import get_actions
+import multiprocessing
 
+# Set multiprocessing start method to 'spawn' to avoid CUDA re-initialization issues
+multiprocessing.set_start_method('spawn', force=True)
+
+from logging import StreamHandler, FileHandler, Formatter
+import logging as log
+import os
+import time
+def config_log(logs_dir,pfx=''):
+    today = time.strftime('%Y-%m-%d', time.localtime(time.time()))
+    file_name = f'{today}.log'
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir, exist_ok=True)  # 确保目录存在
+    file_path = os.path.join(logs_dir, pfx+file_name)
+
+    # 创建一个日志格式化器
+    formatter = Formatter('%(asctime)s %(levelname)s: %(message)s')
+
+    # 创建文件处理器并设置格式化器
+    file_handler = FileHandler(file_path, encoding='utf-8')
+    file_handler.setFormatter(formatter)
+
+    # 创建流处理器（控制台）并设置格式化器
+    stream_handler = StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    # 获取根记录器并添加处理器
+    logger = log.getLogger()
+    logger.setLevel(log.INFO)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -49,7 +82,7 @@ parser.add_argument("--transcation_cost",type=float,default=5.0 / 10000)  # 交�
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=345129)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
+parser.add_argument("--epoch_number",type=int,default=3)  # 训练轮次数 / Training epochs
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
@@ -68,7 +101,16 @@ def seed_torch(seed):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
-
+def _validate_worker(_args):
+    (epoch_path, val_path,__args) = _args
+    
+    logs_dir = os.path.join("./logs/high_level", '{}'.format(__args.dataset), __args.exp)
+    os.makedirs(logs_dir, exist_ok=True) 
+    
+    config_log(logs_dir,pfx='eval-')
+    
+    evalor = HIGH_LEVEL_DQN_EVAL(__args) 
+    return evalor.val_cluster(epoch_path, val_path)   
 
 class DQN(object):
     def __init__(self, args):  # 定义DQN的一系列属性
@@ -80,11 +122,8 @@ class DQN(object):
             self.device = torch.device("cpu")
             
 
-        self.epsilon_device = torch.device("cuda:0") 
-        self.logs_dir = os.path.join("./logs/high_level", '{}'.format(args.dataset), args.exp)
-        os.makedirs(self.logs_dir, exist_ok=True) 
-        
-        config_log(self.logs_dir,pfx='')
+        self.epsilon_device = torch.device("cpu") 
+
         log.info(args)    
             
         self.exp = args.exp
@@ -248,9 +287,10 @@ class DQN(object):
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
         episodicmemory_dim = 64 #*4
-        self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, episodicmemory_dim, self.device)
+        self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, episodicmemory_dim, self.epsilon_device)
         self.no_risk_return = args.no_risk_return
-
+        self.best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record 
+        self.validation_queue = queue.Queue(maxsize=10)  # 验证任务队列，限制大小避免内存溢出
 
     def calculate_q(self, w, qs):
         q_tensor = torch.stack(qs)# qs将6个代理的2个动作的权重 [6，2]  => [6,1,2]
@@ -383,7 +423,7 @@ class DQN(object):
             ]
             # Calculate hypernetwork output
             # 计算超网络输出 6个子代理的权重
-            w = self.hyperagent(x1, x2, x3, previous_action)
+            w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
             # Combine Q-values using hypernetwork weights
             # 使用超网络权重组合Q值
             actions_value = self.calculate_q(w, qs)
@@ -395,38 +435,6 @@ class DQN(object):
             action_choice = [0,1]
             action = random.choice(action_choice)
         return action
-
-    def act_test(self, state, state_trend, state_clf, info):
-        """
-        测试模式下的动作选择（无随机性）
-        
-        Args:
-            state: 当前状态
-            state_trend: 状态趋势
-            state_clf: 状态分类特征
-            info: 包含历史动作等信息的字典
-            
-        Returns:
-            int: 确定性选择的最优动作
-        """
-        with torch.no_grad():
-            x1 = torch.FloatTensor(state).to(self.device)
-            x2 = torch.FloatTensor(state_trend).to(self.device)
-            x3 = torch.FloatTensor(state_clf).unsqueeze(0).to(self.device)
-            previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.device), 0).to(self.device)
-            qs = [
-                    self.slope_agents[0](x1, x2, previous_action),
-                    self.slope_agents[1](x1, x2, previous_action),
-                    self.slope_agents[2](x1, x2, previous_action),
-                    self.vol_agents[0](x1, x2, previous_action),
-                    self.vol_agents[1](x1, x2, previous_action),
-                    self.vol_agents[2](x1, x2, previous_action)
-            ]
-            w = self.hyperagent(x1, x2, x3, previous_action)
-            actions_value = self.calculate_q(w, qs)
-            action = torch.max(actions_value, 1)[1].data.cpu().numpy()
-            action = action[0]
-            return action
 
     def q_estimate(self, state, state_trend, state_clf, info):
         """
@@ -692,8 +700,8 @@ class DQN(object):
         epoch_counter = 0
         best_return_rate = -float('inf')
         best_model = None
-        
-        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) 
+        self._start_validation_consumer()
+        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) .head(3000)
         log.info(f"train data length: {len(self.df)}")
         # 初始化经验回放缓冲区
         # Initialize replay buffer for experience storage
@@ -728,38 +736,154 @@ class DQN(object):
             val_path = os.path.join(epoch_path, "val")
             if not os.path.exists(val_path):
                 os.makedirs(val_path)
-            return_rate_eval = self.val_cluster(epoch_path, val_path)
-            # 更新最佳模型
-            # Update best model if improved
-            if return_rate_eval > best_return_rate:
-                best_return_rate = return_rate_eval
-                best_model = self.hyperagent.state_dict()
-                best_model_path = os.path.join(self.result_path, 'best_model.pkl')
-                torch.save(best_model, best_model_path)
-                log.info(f"best train eval return_rate_eval:{return_rate_eval} epoch_path:{epoch_path}")
-                # 保存最佳模型到文件
-                # Save best model to disk
+                
+            validation_task = (epoch_counter, epoch_path, val_path,args)
+            self.validation_queue.put(validation_task, timeout=5.0)
+            log.info(f"验证任务已加入队列: epoch {epoch_counter}")
+            
+            # evalor = HIGH_LEVEL_DQN_EVAL(args) 
+            
+            # return_rate_eval = evalor.val_cluster(epoch_path, val_path)
+            # # 更新最佳模型
+            # # Update best model if improved
+            # if return_rate_eval > best_return_rate:
+            #     best_return_rate = return_rate_eval
+            #     best_model = self.hyperagent.state_dict()
+            #     best_model_path = os.path.join(self.result_path, 'best_model.pkl')
+            #     torch.save(best_model, best_model_path)
+            #     log.info(f"best train eval return_rate_eval:{return_rate_eval} epoch_path:{epoch_path}")
+            #     # 保存最佳模型到文件
+            #     # Save best model to disk
 
         log.info(f"train done")
-        log.info(f"start  test_cluster best_model_path:{best_model_path},self.result_path:{self.result_path}")
         # 执行最终测试评估
         # Execute final test evaluation
         final_result_path = self.result_path
         #self.test_cluster(best_model_path, final_result_path)
 
-
+    def _start_validation_consumer(self):
+        def validation_consumer():
+            log.info("验证消费者线程启动")
+            while True:
+                try:
+                    # 从队列获取验证任务，设置超时避免无限等待
+                    validation_task = self.validation_queue.get_nowait()
+                    if validation_task is None:  # 停止信号
+                        break
+                    
+                    epoch_counter, epoch_path, val_path,_args = validation_task
+                    log.info(f"验证消费者处理任务: epoch {epoch_counter}")                    
+                    self._async_validate_and_save(epoch_counter, epoch_path, val_path,_args)
+                except queue.Empty:
+                    time.sleep(60)
+                    continue  # 队列为空，继续等待
+                except Exception as e:
+                    log.error(f"验证消费者线程异常: {e}")
+                    continue
+            
+            log.info("验证消费者线程停止")
+        
+        # 启动验证消费者线程 
+        self.validation_thread = threading.Thread(target=validation_consumer, daemon=True)
+        self.validation_thread.start()
+        log.info("验证消费者线程已启动")
+    def _async_validate_and_save(self, epoch_counter, epoch_path, val_path,_args ):
+        """
+        异步执行验证和保存最佳模型的逻辑
+        
+        中文说明：
+        本函数在单独的线程中执行验证和最佳模型保存操作，
+        避免阻塞主训练进程。
+        
+        English description:
+        This function performs validation and best model saving in a separate thread,
+        preventing blocking of the main training process.
+        
+        Parameters:
+            epoch_counter (int): 当前训练周期 / Current epoch counter
+            epoch_path (str): 模型保存路径 / Model saving path
+            val_path (str): 验证结果保存路径 / Validation result saving path
+            var_df_list (list): 验证数据索引列表 / Validation data index list
+            
+        Returns:
+            tuple: return_rate_eval 
+        """
+        log.info(f"异步验证开始: epoch {epoch_counter}")
+        return_rates = []
+        args_list = [
+            (epoch_path, val_path,_args)          
+        ]
+        with multiprocessing.Pool(processes=1) as pool:
+            results = pool.imap_unordered(_validate_worker, args_list)
+            # 创建验证实例 / Create validation instance
+            for result in results:
+                return_rates.append(result)   
+             
+        # 执行验证 / Perform validation     
+        # 计算平均验证收益率 / Calculate average validation return rate
+        return_rate_eval = np.mean(return_rates)
+        log.info(f"异步验证结束: epoch {epoch_counter}, 验证收益率: {return_rate_eval} best:{self.best_return_rate}")
+        if return_rate_eval > self.best_return_rate:
+            self.best_return_rate = return_rate_eval 
+            model_file = os.path.join(epoch_path, "trained_model.pkl")
+            log.info(f"best model updated to epoch {epoch_counter}.best_return_rate:{self.best_return_rate}")
+            best_model_folder_path = os.path.join(self.result_path, 'best_model')
+            if not os.path.exists(best_model_folder_path):
+                os.makedirs(best_model_folder_path)
+            best_model_path = os.path.join(best_model_folder_path, 'best_model.pkl')
+            #将模型保存到指定路径 / Save model to specified path    
+            shutil.copy2(model_file, best_model_path)
+            
+            
+class HIGH_LEVEL_DQN_EVAL(DQN):
+    def __init__(self, args):  # 定义DQN的一系列属性
+        super(HIGH_LEVEL_DQN_EVAL,
+              self).__init__(args)
+        
+    def act_test(self, state, state_trend, state_clf, info):
+        """
+        测试模式下的动作选择（无随机性）
+        
+        Args:
+            state: 当前状态
+            state_trend: 状态趋势
+            state_clf: 状态分类特征
+            info: 包含历史动作等信息的字典
+            
+        Returns:
+            int: 确定性选择的最优动作
+        """
+        with torch.no_grad():
+            x1 = torch.FloatTensor(state).to(self.epsilon_device)
+            x2 = torch.FloatTensor(state_trend).to(self.epsilon_device)
+            x3 = torch.FloatTensor(state_clf).unsqueeze(0).to(self.epsilon_device)
+            previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.epsilon_device), 0).to(self.epsilon_device)
+            qs = [
+                    self.slope_epsilon_agents[0](x1, x2, previous_action),
+                    self.slope_epsilon_agents[1](x1, x2, previous_action),
+                    self.slope_epsilon_agents[2](x1, x2, previous_action),
+                    self.vol_epsilon_agents[0](x1, x2, previous_action),
+                    self.vol_epsilon_agents[1](x1, x2, previous_action),
+                    self.vol_epsilon_agents[2](x1, x2, previous_action)
+            ]
+            w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
+            actions_value = self.calculate_q(w, qs)
+            action = torch.max(actions_value, 1)[1].data.cpu().numpy()
+            action = action[0]
+            return action
+        
     def val_cluster(self, epoch_path, save_path):
         log.info(f"val_cluster epoch_path:{epoch_path}")
-        self.hyperagent.load_state_dict(
+        self.epsilon_hyperagent.load_state_dict(
             torch.load(os.path.join(epoch_path, "trained_model.pkl")))
-        self.hyperagent.eval()
+        self.epsilon_hyperagent.eval()
         counter = False
         action_list = []
         reward_list = []
         final_balance_list = []
         required_money_list = []
         commission_fee_list = []
-        self.df = pd.read_feather(os.path.join(self.val_data_path, "val.feather"))
+        self.df = pd.read_feather(os.path.join(self.val_data_path, "val.feather")).head(3000)
         log.info(f"val data length: {len(self.df)}")
         
         val_env = Testing_Env(
@@ -807,16 +931,46 @@ class DQN(object):
         np.save(os.path.join(save_path, "commission_fee_history_val.npy"), commission_fee_list)
         return_rate = final_balance / required_money
         return return_rate
-
-    def test_cluster(self, epoch_path, save_path):
-        self.slope_agents[0] = self.slope_agents[0].to(self.device)
-        self.slope_agents[1] = self.slope_agents[1].to(self.device)
-        self.slope_agents[2] = self.slope_agents[2].to(self.device)
-        self.vol_agents[0] = self.vol_agents[0].to(self.device)
-        self.vol_agents[1] = self.vol_agents[1].to(self.device)
-        self.vol_agents[2] = self.vol_agents[2].to(self.device)
  
-        self.hyperagent = self.hyperagent.to(self.device)
+class HIGH_LEVEL_DQN_TEST(DQN):
+    def __init__(self, args):  # 定义DQN的一系列属性
+        super(HIGH_LEVEL_DQN_TEST,
+              self).__init__(args)
+        
+    def act_test(self, state, state_trend, state_clf, info):
+        """
+        测试模式下的动作选择（无随机性）
+        
+        Args:
+            state: 当前状态
+            state_trend: 状态趋势
+            state_clf: 状态分类特征
+            info: 包含历史动作等信息的字典
+            
+        Returns:
+            int: 确定性选择的最优动作
+        """
+        with torch.no_grad():
+            x1 = torch.FloatTensor(state).to(self.device)
+            x2 = torch.FloatTensor(state_trend).to(self.device)
+            x3 = torch.FloatTensor(state_clf).unsqueeze(0).to(self.device)
+            previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.device), 0).to(self.device)
+            qs = [
+                    self.slope_agents[0](x1, x2, previous_action),
+                    self.slope_agents[1](x1, x2, previous_action),
+                    self.slope_agents[2](x1, x2, previous_action),
+                    self.vol_agents[0](x1, x2, previous_action),
+                    self.vol_agents[1](x1, x2, previous_action),
+                    self.vol_agents[2](x1, x2, previous_action)
+            ]
+            w = self.hyperagent(x1, x2, x3, previous_action)
+            actions_value = self.calculate_q(w, qs)
+            action = torch.max(actions_value, 1)[1].data.cpu().numpy()
+            action = action[0]
+            return action
+        
+    def test_cluster(self, epoch_path, save_path):     
+        log.info(f"开始测试: epoch {epoch_path}")
         self.hyperagent.load_state_dict(torch.load(epoch_path))
         self.hyperagent.eval()
         counter = False
@@ -825,7 +979,7 @@ class DQN(object):
         final_balance_list = []
         required_money_list = []
         commission_fee_list = []
-        self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather"))
+        self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather")).head(3000)
         log.info(self.df.head(10))
         log.info(self.df.tail(10))
         log.info(len(self.df))
@@ -908,42 +1062,26 @@ class DQN(object):
         np.save(os.path.join(save_path, "trade_records.npy"), np.array(test_env.trade_records))
         np.save(os.path.join(save_path, "value_history.npy"), np.array(test_env.value_history))
             
+ 
+ 
 
     
-from logging import StreamHandler, FileHandler, Formatter
-import logging as log
-import os
-import time
-def config_log(logs_dir,pfx=''):
-    today = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-    file_name = f'{today}.log'
-    if not os.path.exists(logs_dir):
-        os.makedirs(logs_dir, exist_ok=True)  # 确保目录存在
-    file_path = os.path.join(logs_dir, pfx+file_name)
 
-    # 创建一个日志格式化器
-    formatter = Formatter('%(asctime)s %(levelname)s: %(message)s')
-
-    # 创建文件处理器并设置格式化器
-    file_handler = FileHandler(file_path, encoding='utf-8')
-    file_handler.setFormatter(formatter)
-
-    # 创建流处理器（控制台）并设置格式化器
-    stream_handler = StreamHandler()
-    stream_handler.setFormatter(formatter)
-
-    # 获取根记录器并添加处理器
-    logger = log.getLogger()
-    logger.setLevel(log.INFO)
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
     
 
 if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
+    logs_dir = os.path.join("./logs/high_level", '{}'.format(args.dataset), args.exp)
+    os.makedirs(logs_dir, exist_ok=True) 
+    
+    config_log(logs_dir,pfx='')
     agent = DQN(args)
     agent.train()
+    time.sleep(60)
     final_result_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), agent.exp)
-    best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), agent.exp, 'best_model.pkl')
-    agent.test_cluster(best_model_path, final_result_path)
+    best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), agent.exp, 'best_model' ,'best_model.pkl')
+    log.info(f"start  test_cluster best_model_path:{best_model_path},self.result_path:{final_result_path}")
+
+    test_agent = HIGH_LEVEL_DQN_TEST(args)
+    test_agent.test_cluster(best_model_path, final_result_path)

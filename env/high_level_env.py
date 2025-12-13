@@ -28,7 +28,12 @@ transcation_cost = 0.0002
 back_time_length = 1
 max_holding_number = 0.01
 alpha = 0
+import hashlib
 
+def get_stable_hash(key_string):
+    # 使用稳定的hash算法（如MD5、SHA256等）
+    hash_object = hashlib.md5(key_string.encode())
+    return hash_object.hexdigest()
 # 功能特性：
 
 # 动作空间：Discrete(2) 表示买入/卖出两个基础动作
@@ -666,8 +671,9 @@ class Training_Env(Testing_Env):
         df_filename = os.path.splitext(os.path.basename(df_path))[0]
          # 将action_mode、num_action和df_filename组合并转换为hashcode
         key_string = f"{action_mode}_{num_action}_{df_path}"
+        print(key_string)
         # 使用hash函数生成hashcode
-        hashcode = hex(hash(key_string))[2:]  # 去掉开头的'0x'
+        hashcode = get_stable_hash(key_string)  # 每次结果相同
         
         # 生成文件名：hashcode.pkl
         filename = f"q_table_{hashcode}.pkl"
