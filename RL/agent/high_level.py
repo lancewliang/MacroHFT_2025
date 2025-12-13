@@ -68,7 +68,7 @@ os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
-parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
+parser.add_argument("--q_value_memorize_freq",type=int, default=1024)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=2048)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=1e-5)  # 学习率 / Learning rate
@@ -598,7 +598,7 @@ class DQN(object):
             if step_counter % self.eval_update_freq == 0 and step_counter > (self.batch_size + self.n_step):
                 log.info(f"update network {step_counter}")
                 
-                log.info(f"批量存储 {len(temp_experience_buffer)} 条经验到replay buffer")
+                # log.info(f"批量存储 {len(temp_experience_buffer)} 条经验到replay buffer")
                 if temp_experience_buffer:
                     for exp in temp_experience_buffer:
                         self.replay_buffer.store_transition(*exp)
