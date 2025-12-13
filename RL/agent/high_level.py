@@ -82,7 +82,7 @@ parser.add_argument("--transcation_cost",type=float,default=5.0 / 10000)  # 交�
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=345129)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=3)  # 训练轮次数 / Training epochs
+parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
@@ -701,7 +701,7 @@ class DQN(object):
         best_return_rate = -float('inf')
         best_model = None
         self._start_validation_consumer()
-        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) .head(3000)
+        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) 
         log.info(f"train data length: {len(self.df)}")
         # 初始化经验回放缓冲区
         # Initialize replay buffer for experience storage
@@ -883,7 +883,7 @@ class HIGH_LEVEL_DQN_EVAL(DQN):
         final_balance_list = []
         required_money_list = []
         commission_fee_list = []
-        self.df = pd.read_feather(os.path.join(self.val_data_path, "val.feather")).head(3000)
+        self.df = pd.read_feather(os.path.join(self.val_data_path, "val.feather"))
         log.info(f"val data length: {len(self.df)}")
         
         val_env = Testing_Env(
@@ -979,7 +979,7 @@ class HIGH_LEVEL_DQN_TEST(DQN):
         final_balance_list = []
         required_money_list = []
         commission_fee_list = []
-        self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather")).head(3000)
+        self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather")) 
         log.info(self.df.head(10))
         log.info(self.df.tail(10))
         log.info(len(self.df))
