@@ -11,6 +11,8 @@ import sys
 import pathlib
 import pdb
 import logging as log
+
+import pickle  # 添加pickle导入用于序列化
 ROOT = str(pathlib.Path(__file__).resolve().parents[2])
 sys.path.append(ROOT)
 sys.path.insert(0, ".")
@@ -574,6 +576,7 @@ class Training_Env(Testing_Env):
         self,
         df_path,
         df: pd.DataFrame,
+        q_table_path="./result/high_level/",
         tech_indicator_list=tech_indicator_list,
         tech_indicator_list_trend=tech_indicator_list_trend,
         clf_list=clf_list,
@@ -604,20 +607,74 @@ class Training_Env(Testing_Env):
               self).__init__(df, tech_indicator_list, tech_indicator_list_trend, clf_list, transcation_cost,
                              back_time_length, max_holding_number, initial_action, actions, action_mode)
         # 构建 Q 表（用于强化学习策略优化）
-        if q_table_dict.get(df_path,None) is None:      
-            q_table_dict[df_path] = make_q_table_reward(df,
-                                           actions=actions,
-                                           num_action=num_action,
-                                           max_holding=max_holding_number,
-                                           commission_fee=0.001,
-                                           action_mode=action_mode,
-                                           reward_scale=1,
-                                           gamma=0.99,
-                                           max_punish=1e12)
+        if q_table_dict.get(df_path,None) is None:  
+            q_table_file = self._generate_q_table_filename(action_mode, num_action, df_path,q_table_path)
+            
+            # 检查文件是否存在
+            if os.path.exists(q_table_file):
+                try:
+                    # 从文件加载Q表
+                    with open(q_table_file, 'rb') as f:
+                        q_table_reward = pickle.load(f)
+                    log.info(f"从文件加载Q表: {q_table_file}")
+                except Exception as e:
+                    log.warning(f"加载Q表文件失败 {q_table_file}: {e}, 重新计算Q表")
+                    q_table_reward = self._compute_q_table(df, actions, num_action, max_holding_number, transcation_cost, action_mode)
+                    # 保存计算后的Q表到文件
+                    with open(q_table_file, 'wb') as f:
+                        pickle.dump(q_table_reward, f)
+                    log.info(f"Q表计算完成并保存到: {q_table_file}")
+            else:
+                # 文件不存在，计算Q表
+                q_table_reward = self._compute_q_table(df, actions, num_action, max_holding_number, transcation_cost, action_mode)
+                # 保存计算后的Q表到文件
+                with open(q_table_file, 'wb') as f:
+                    pickle.dump(q_table_reward, f)
+                log.info(f"Q表计算完成并保存到: {q_table_file}") 
+            q_table_dict[df_path] = q_table_reward
         self.q_table = q_table_dict[df_path]
         # 记录初始动作
         self.initial_action = initial_action
-
+        
+    def _compute_q_table(self, df, actions, num_action, max_holding, commission_fee, action_mode):
+        """
+        计算Q表的辅助方法
+        """
+        return make_q_table_reward(df,
+                                  actions=actions,
+                                  num_action=num_action,
+                                  max_holding=max_holding,
+                                  commission_fee=commission_fee,
+                                  action_mode=action_mode,
+                                  reward_scale=1,
+                                  gamma=0.99,
+                                  max_punish=1e12)
+    def _generate_q_table_filename(self,action_mode, num_action, df_path,base_dir):
+        """
+        根据action_mode, num_action和df_path生成唯一的Q表文件名
+        
+        参数:
+            action_mode: 动作模式 ("long", "short", "both")
+            num_action: 动作数量
+            df_path: 数据文件路径
+            base_dir: 基础目录路径
+        
+        返回:
+            str: 完整的文件路径
+        """
+        # 从df_path中提取文件名（不含路径和扩展名）
+        df_filename = os.path.splitext(os.path.basename(df_path))[0]
+         # 将action_mode、num_action和df_filename组合并转换为hashcode
+        key_string = f"{action_mode}_{num_action}_{df_path}"
+        # 使用hash函数生成hashcode
+        hashcode = hex(hash(key_string))[2:]  # 去掉开头的'0x'
+        
+        # 生成文件名：hashcode.pkl
+        filename = f"q_table_{hashcode}.pkl"
+        # 确保目录存在
+        os.makedirs(base_dir, exist_ok=True)
+        # 返回完整路径
+        return os.path.join(base_dir, filename)
 
     def reset(self):
         """
