@@ -328,27 +328,27 @@ class DQN(object):
 
         # Compute Q-values from slope/volatility agents
         # 计算斜率/波动率代理的Q值
-        batch_state = batch['state'].to(self.device)
-        batch_state_trend= batch['state_trend'].to(self.device)
-        batch_previous_action= batch['previous_action'].to(self.device)
-        batch_next_state = batch['next_state'].to(self.device)
-        batch_next_state_trend= batch['next_state_trend'].to(self.device)
-        batch_next_previous_action= batch['next_previous_action'].to(self.device)
+        batch_state = batch['state']
+        batch_state_trend= batch['state_trend']
+        batch_previous_action= batch['previous_action']
+        batch_next_state = batch['next_state']
+        batch_next_state_trend= batch['next_state_trend']
+        batch_next_previous_action= batch['next_previous_action']
         qs_current = [
-                    self.slope_agents[0](batch_state, batch_state_trend, batch_previous_action).to(self.device),
-                    self.slope_agents[1](batch_state, batch_state_trend, batch_previous_action).to(self.device),
-                    self.slope_agents[2](batch_state, batch_state_trend, batch_previous_action).to(self.device),
-                    self.vol_agents[0](batch_state, batch_state_trend, batch_previous_action).to(self.device),
-                    self.vol_agents[1](batch_state, batch_state_trend, batch_previous_action).to(self.device),
-                    self.vol_agents[2](batch_state, batch_state_trend, batch_previous_action).to(self.device)
+                    self.slope_agents[0](batch_state, batch_state_trend, batch_previous_action),
+                    self.slope_agents[1](batch_state, batch_state_trend, batch_previous_action),
+                    self.slope_agents[2](batch_state, batch_state_trend, batch_previous_action),
+                    self.vol_agents[0](batch_state, batch_state_trend, batch_previous_action),
+                    self.vol_agents[1](batch_state, batch_state_trend, batch_previous_action),
+                    self.vol_agents[2](batch_state, batch_state_trend, batch_previous_action)
         ]
         qs_next = [
-                    self.slope_agents[0](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
-                    self.slope_agents[1](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
-                    self.slope_agents[2](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
-                    self.vol_agents[0](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
-                    self.vol_agents[1](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
-                    self.vol_agents[2](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device)
+                    self.slope_agents[0](batch_next_state, batch_next_state_trend, batch_next_previous_action),
+                    self.slope_agents[1](batch_next_state, batch_next_state_trend, batch_next_previous_action),
+                    self.slope_agents[2](batch_next_state, batch_next_state_trend, batch_next_previous_action),
+                    self.vol_agents[0](batch_next_state, batch_next_state_trend, batch_next_previous_action),
+                    self.vol_agents[1](batch_next_state, batch_next_state_trend, batch_next_previous_action),
+                    self.vol_agents[2](batch_next_state, batch_next_state_trend, batch_next_previous_action)
         ]
         # Calculate Q distribution and gather selected actions
         # 计算Q分布并收集选定动作
