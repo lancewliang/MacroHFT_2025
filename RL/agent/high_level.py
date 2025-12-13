@@ -69,9 +69,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
+parser.add_argument("--batch_size",type=int,default=2048)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
+parser.add_argument("--lr", type=float, default=1e-5)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
@@ -319,7 +319,7 @@ class DQN(object):
         # Sample transition from replay buffer & move to device
         # 从经验回放缓冲区采样并移动到指定设备
         batch, _, _ = replay_buffer.sample()
-        batch = {k: v.to(self.device) for k, v in batch.items()}
+        # batch = {k: v for k, v in batch.items()}
         # Calculate current and target hypernetwork outputs
         # 计算当前和目标超网络输出
         w_current = self.hyperagent(batch['state'], batch['state_trend'], batch['state_clf'], batch['previous_action'])
@@ -532,6 +532,7 @@ class DQN(object):
             更新后的step计数器
         """
         
+        temp_experience_buffer = []
         
         train_env = Training_Env(
                 "full",
@@ -584,8 +585,9 @@ class DQN(object):
 
             # 存储经验到回放缓冲区
             # Store transition in replay buffer
-            self.replay_buffer.store_transition(single_state, trend_state, clf_state, previous_action, demo_action, action, reward, next_single_state, next_trend_state, next_clf_state, next_previous_action, next_demo_action, done, q_memory)
-
+            experience = (single_state, trend_state, clf_state, previous_action, demo_action, action, reward, 
+                     next_single_state, next_trend_state, next_clf_state, next_previous_action, next_demo_action, done, q_memory)
+            temp_experience_buffer.append(experience)
 
             episode_reward_sum += reward
 
@@ -595,6 +597,12 @@ class DQN(object):
             # Periodically update model parameters
             if step_counter % self.eval_update_freq == 0 and step_counter > (self.batch_size + self.n_step):
                 log.info(f"update network {step_counter}")
+                
+                log.info(f"批量存储 {len(temp_experience_buffer)} 条经验到replay buffer")
+                if temp_experience_buffer:
+                    for exp in temp_experience_buffer:
+                        self.replay_buffer.store_transition(*exp)
+                    temp_experience_buffer.clear()  # 清空临时缓冲区                
                 for i in range(self.update_times):
                     td_error, memory_error, KL_loss, q_eval, q_target = self.update(self.replay_buffer)
                     if self.update_counter % self.q_value_memorize_freq == 1:
