@@ -382,7 +382,7 @@ class DQN(object):
         for param, target_param in zip(self.hyperagent.parameters(), self.hyperagent_target.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
         self.update_counter += 1
-        return td_error.cpu(), memory_error.cpu(), KL_loss.cpu(), torch.mean(q_current.cpu()), torch.mean(q_target.cpu())
+        return td_error, memory_error, KL_loss, torch.mean(q_current), torch.mean(q_target)
 
     def select_action(self, state, state_trend, state_clf, info):
         """
@@ -606,11 +606,11 @@ class DQN(object):
                 for i in range(self.update_times):
                     td_error, memory_error, KL_loss, q_eval, q_target = self.update(self.replay_buffer)
                     if self.update_counter % self.q_value_memorize_freq == 1:
-                        self.writer.add_scalar(tag="td_error", scalar_value=td_error, global_step=self.update_counter, walltime=None)
-                        self.writer.add_scalar(tag="memory_error", scalar_value=memory_error, global_step=self.update_counter, walltime=None)
-                        self.writer.add_scalar(tag="KL_loss", scalar_value=KL_loss, global_step=self.update_counter, walltime=None)
-                        self.writer.add_scalar(tag="q_eval", scalar_value=q_eval, global_step=self.update_counter, walltime=None)
-                        self.writer.add_scalar(tag="q_target", scalar_value=q_target, global_step=self.update_counter, walltime=None)
+                        self.writer.add_scalar(tag="td_error", scalar_value=td_error.cpu(), global_step=self.update_counter, walltime=None)
+                        self.writer.add_scalar(tag="memory_error", scalar_value=memory_error.cpu(), global_step=self.update_counter, walltime=None)
+                        self.writer.add_scalar(tag="KL_loss", scalar_value=KL_loss.cpu(), global_step=self.update_counter, walltime=None)
+                        self.writer.add_scalar(tag="q_eval", scalar_value=q_eval.cpu(), global_step=self.update_counter, walltime=None)
+                        self.writer.add_scalar(tag="q_target", scalar_value=q_target.cpu(), global_step=self.update_counter, walltime=None)
                 self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
                 self.epsilon_hyperagent.to(self.epsilon_device)
                 self.epsilon_hyperagent.eval()
