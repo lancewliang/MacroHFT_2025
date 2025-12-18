@@ -45,7 +45,7 @@ parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 /
 parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=2.0 / 100000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=2.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
@@ -54,7 +54,7 @@ parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / 
 parser.add_argument("--device",type=str,default="cpu")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--no_risk_return",type=float,default=4.5) #无风险返回率
-parser.add_argument("--exp",type=str,default="exp1")
+parser.add_argument("--exp",type=str,default="exp12")
 parser.add_argument("--num_step",type=int,default=10)
 
 
@@ -125,6 +125,15 @@ class DQN(object):
         self.n_action = 2
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
+        self.epsilon_hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.epsilon_device)
+        self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
+        self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
+        log.info(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
+        self.hyperagent_target.load_state_dict(self.hyperagent.state_dict())
+        self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
+        self.epsilon_hyperagent.eval()
+        
+        log.info(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
         self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
         self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
         self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
@@ -163,12 +172,7 @@ class DQN(object):
             1: self.vol_2,
             2: self.vol_3
         }
-        self.epsilon_hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.epsilon_device)
-        self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
-        self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
-        self.hyperagent_target.load_state_dict(self.hyperagent.state_dict())
-        self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
-        self.epsilon_hyperagent.eval()
+
         self.update_times = args.update_times
         self.optimizer = torch.optim.Adam(self.hyperagent.parameters(), lr=args.lr)
         self.loss_func = nn.MSELoss()
@@ -214,6 +218,7 @@ class DQN(object):
         # Sample transition from replay buffer & move to device
         # 从经验回放缓冲区采样并移动到指定设备
         batch, _, _ = replay_buffer.sample()
+        # log.info(batch)
         batch = {k: v.to(self.device) for k, v in batch.items()}
         # Calculate current and target hypernetwork outputs
         # 计算当前和目标超网络输出
@@ -265,7 +270,8 @@ class DQN(object):
         loss = td_error + args.alpha * memory_error + args.beta * KL_loss
         self.optimizer.zero_grad()
         loss.backward()
-
+        # log.info(f"loss: {loss.item()} td_error: {td_error.item()} memory_error: {memory_error.item()} KL_loss: {KL_loss.item()}")
+        
         torch.nn.utils.clip_grad_norm_(self.hyperagent.parameters(), 1)
         self.optimizer.step()
         for param, target_param in zip(self.hyperagent.parameters(), self.hyperagent_target.parameters()):
@@ -463,7 +469,7 @@ class DQN(object):
                 transcation_cost=self.transcation_cost,
                 back_time_length=self.back_time_length,
                 max_holding_number=self.max_holding_number,
-                n_action = self.n_action,
+ 
                 initial_action=random.choices(range(self.n_action), k=1)[0],
                 alpha = 0)
         single_state, trend_state, clf_state, info = train_env.reset()
@@ -666,8 +672,8 @@ class DQN(object):
         
         # 执行最终测试评估
         # Execute final test evaluation
-        final_result_path = self.result_path
-        self.test_cluster(best_model_path, final_result_path)
+        # final_result_path = self.result_path
+        # self.test_cluster(best_model_path, final_result_path)
 
 
     def val_cluster(self, epoch_path, save_path):
@@ -827,7 +833,7 @@ def config_log(logs_dir,pfx=''):
     file_path = os.path.join(logs_dir, pfx+file_name)
 
     # 创建一个日志格式化器
-    formatter = Formatter('%(asctime)s %(levelname)s: %(message)s')
+    formatter = Formatter('%(message)s')
 
     # 创建文件处理器并设置格式化器
     file_handler = FileHandler(file_path, encoding='utf-8')
@@ -848,7 +854,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
     agent = DQN(args)
-    # agent.train()
-    final_result_path = os.path.join("./result/high_level", '{}'.format(agent.dataset))
-    best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), 'best_model.pkl')
+    agent.train()
+    final_result_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), args.exp)
+    best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), args.exp, 'best_model.pkl')
     agent.test_cluster(best_model_path, final_result_path)

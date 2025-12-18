@@ -320,8 +320,10 @@ class Testing_Env(gym.Env):
 
             
         # 更新持仓记录
-        self.previous_position = self.position 
-
+        self.previous_position = self.position
+        return_margin, pure_balance, required_money, commission_fee = self.get_final_return_rate() 
+        # log.info(f"m:{self.m}, price: {current_price_information['close']}, action: {action}, self.current_money: 0, self.current_value: 0, reward: {self.reward}, return_margin: {return_margin:.2f}, pure_balance: {pure_balance:.2f}, required_money: {required_money:.2f}, commission_fee: {commission_fee:.2f}")
+        
 
         if self.terminal:
             #应该把手上的仓位全部平掉
@@ -397,7 +399,9 @@ class Testing_Env(gym.Env):
         #     balance_list.append(np.sum(true_money[:i + 1]))
         balance_list = np.cumsum(true_money)
         # 计算最大资金需求（历史最低余额的绝对值） （风险度量指标） 
-        required_money = -np.min(balance_list)
+        required_money = 0
+        if len(balance_list) > 0:
+            required_money = -np.min(balance_list)
         # 计算总手续费（注意：字段名存在拼写错误 comission -> commission）
         commission_fee = np.sum(self.comission_fee_history)
         # 返回相对收益率、净收益、最大资金需求、总手续费

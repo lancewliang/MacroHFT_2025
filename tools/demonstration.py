@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import logging as log
 
 # 该文件实现了基于强化学习的Q-table奖励值生成模块，主要用于金融交易场景中的决策优化。以下是详细架构分析：
 
@@ -80,7 +81,9 @@ def make_q_table_reward(df: pd.DataFrame,
                     future_value = calculate_value(future_price_information, current_position)
                     reward = future_value - (current_value + buy_money)
                     reward = reward_scale * reward
-                    q_table[len(df) - t][previous_action][current_action] = reward + gamma * np.max(q_table[len(df) - t + 1][current_action][:])
+                    _q_value= reward + gamma * np.max(q_table[len(df) - t + 1][current_action][:])
+                    q_table[len(df) - t][previous_action][current_action] = _q_value
+                    # log.info(f"t={t}, previous_action_index={previous_action}, current_action_index={current_action}, total_reward={reward}, _q_value={_q_value}")
                 else:
                      # Sell operation calculation
                     # 卖出操作计算
@@ -92,5 +95,7 @@ def make_q_table_reward(df: pd.DataFrame,
                     future_value = calculate_value(future_price_information, current_position)
                     reward = future_value + sell_money - current_value
                     reward = reward_scale * reward
-                    q_table[len(df) - t][previous_action][current_action] = reward + gamma * np.max(q_table[len(df) - t + 1][current_action][:])
+                    _q_value = reward + gamma * np.max(q_table[len(df) - t + 1][current_action][:])
+                    q_table[len(df) - t][previous_action][current_action] = _q_value
+                    # log.info(f"t={t}, previous_action_index={previous_action}, current_action_index={current_action}, total_reward={reward}, _q_value={_q_value}")
     return q_table
