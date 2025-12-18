@@ -44,8 +44,8 @@ def config_log(logs_dir,pfx=''):
     file_path = os.path.join(logs_dir, pfx+file_name)
 
     # 创建一个日志格式化器
-    formatter = Formatter('%(asctime)s %(levelname)s: %(message)s')
-
+    # formatter = Formatter('%(asctime)s %(levelname)s: %(message)s')
+    formatter = Formatter('%(message)s')
     # 创建文件处理器并设置格式化器
     file_handler = FileHandler(file_path, encoding='utf-8')
     file_handler.setFormatter(formatter)
@@ -68,29 +68,30 @@ os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
-parser.add_argument("--q_value_memorize_freq",type=int, default=1024)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=2048)  # 批次大小 / Mini-batch size
+parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
+parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=1e-5)  # 学习率 / Learning rate
+parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
 parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=5.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=2.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
-parser.add_argument("--seed",type=int,default=345129)  # 随机种子 / Random seed
+parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=15)  # 训练轮次数 / Training epochs
+parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--no_risk_return",type=float,default=4.5) #无风险返回率
-parser.add_argument("--exp",type=str,default="exp2")
+parser.add_argument("--exp",type=str,default="exp4_3")
 parser.add_argument("--num_step",type=int,default=10)
 parser.add_argument("--action_mode",type=str,default="long")  # 动作方向
 parser.add_argument("--action_size",type=int,default=1)  # 动作数量
+parser.add_argument("--reward_no_action",type=bool,default=False)  # 奖励没有动作
 
 def seed_torch(seed):
     random.seed(seed)
@@ -172,6 +173,18 @@ class DQN(object):
  
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
+        
+        high_level_hidden_dim = 32  #*4
+        self.epsilon_hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.epsilon_device)
+        self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
+        self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
+        log.info(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
+        self.hyperagent_target.load_state_dict(self.hyperagent.state_dict())
+        self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
+        self.epsilon_hyperagent.eval()
+        log.info(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
+        
+                       
         low_level_hidden_dim = 64  #*8
         self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
         self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
@@ -265,13 +278,7 @@ class DQN(object):
             1: self.vol_epsilon_2,
             2: self.vol_epsilon_3
         }
-        high_level_hidden_dim = 32  #*4
-        self.epsilon_hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.epsilon_device)
-        self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
-        self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
-        self.hyperagent_target.load_state_dict(self.hyperagent.state_dict())
-        self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
-        self.epsilon_hyperagent.eval()
+
         self.update_times = args.update_times
         self.optimizer = torch.optim.Adam(self.hyperagent.parameters(), lr=args.lr)
         self.loss_func = nn.MSELoss()
@@ -291,6 +298,8 @@ class DQN(object):
         self.no_risk_return = args.no_risk_return
         self.best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record 
         self.validation_queue = queue.Queue(maxsize=10)  # 验证任务队列，限制大小避免内存溢出
+        self.reward_no_action = args.reward_no_action
+        
 
     def calculate_q(self, w, qs):
         q_tensor = torch.stack(qs)# qs将6个代理的2个动作的权重 [6，2]  => [6,1,2]
@@ -319,6 +328,8 @@ class DQN(object):
         # Sample transition from replay buffer & move to device
         # 从经验回放缓冲区采样并移动到指定设备
         batch, _, _ = replay_buffer.sample()
+        # log.info("sample")
+        # log.info(batch)
         # batch = {k: v for k, v in batch.items()}
         # Calculate current and target hypernetwork outputs
         # 计算当前和目标超网络输出
@@ -376,7 +387,7 @@ class DQN(object):
         loss = td_error + args.alpha * memory_error + args.beta * KL_loss
         self.optimizer.zero_grad()
         loss.backward()
-
+        # log.info(f"loss: {loss.item()} td_error: {td_error.item()} memory_error: {memory_error.item()} KL_loss: {KL_loss.item()}")
         torch.nn.utils.clip_grad_norm_(self.hyperagent.parameters(), 1)
         self.optimizer.step()
         for param, target_param in zip(self.hyperagent.parameters(), self.hyperagent_target.parameters()):
@@ -423,17 +434,22 @@ class DQN(object):
             ]
             # Calculate hypernetwork output
             # 计算超网络输出 6个子代理的权重
-            w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
+            with torch.no_grad():
+                w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
             # Combine Q-values using hypernetwork weights
             # 使用超网络权重组合Q值
+
             actions_value = self.calculate_q(w, qs)
             # Select action with max Q-value
             # 选择最大Q值的动作 (根据动作q值，选择动作， max()[1]选择的数组下标,max()[0] q值)
             action = torch.max(actions_value, 1)[1].data.cpu().numpy()
             action = action[0]
+            #log.info(f"select_action epsilon: {action} {previous_action} {w.data.cpu().numpy()}")
+            # log.info(f"  {qs}")
         else:
             action_choice = [0,1]
             action = random.choice(action_choice)
+            #log.info(f"select_action random: {action}")
         return action
 
     def q_estimate(self, state, state_trend, state_clf, info):
@@ -469,7 +485,8 @@ class DQN(object):
         ]
         # Calculate hypernetwork output
         # 计算超网络输出
-        w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
+        with torch.no_grad():
+            w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
         # 形状[1,6]， 6个 子网络的权重，
         # Combine Q-values using hypernetwork weights
         # 使用超网络权重组合Q值  
@@ -548,6 +565,7 @@ class DQN(object):
                 actions = self.actions,   
                 action_mode=self.action_mode,  
                 initial_action=random.choices(range(self.n_action), k=1)[0],
+                reward_no_action=self.reward_no_action,
                 alpha = 0)
         single_state, trend_state, clf_state, info = train_env.reset()
         episode_reward_sum = 0
@@ -573,6 +591,7 @@ class DQN(object):
             # 查询记忆库中的Q值
             # Query Q-value from memory
             q_memory = self.memory.query(hs, action)
+            # log.info(f"info {info} hs {hs} q_memory={q_memory}")
             # 计算目标Q值
             # Calculate target Q-value
             q = reward + self.gamma * (1 - done) * self.q_estimate(next_single_state, next_trend_state, next_clf_state, next_info)
@@ -611,6 +630,8 @@ class DQN(object):
                         self.writer.add_scalar(tag="KL_loss", scalar_value=KL_loss.cpu(), global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_eval", scalar_value=q_eval.cpu(), global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_target", scalar_value=q_target.cpu(), global_step=self.update_counter, walltime=None)
+                    _state_dict = self.hyperagent.state_dict()
+                    # log.info("_state_dict {_state_dict}")
                 self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
                 self.epsilon_hyperagent.to(self.epsilon_device)
                 self.epsilon_hyperagent.eval()
@@ -1001,7 +1022,8 @@ class HIGH_LEVEL_DQN_TEST(DQN):
                 max_holding_number=self.max_holding_number,
                 initial_action=0,
                 actions = self.actions,   
-                action_mode=self.action_mode )
+                action_mode=self.action_mode ,
+                reward_no_action=self.reward_no_action)
         s, s2, s3, info = test_env.reset()
         done = False
         action_list_episode = []

@@ -91,7 +91,8 @@ class Testing_Env(gym.Env):
         max_holding_number=max_holding_number,  #最大持仓量
         initial_action=0,
         actions=[],
-        action_mode="long"
+        action_mode="long",
+        reward_no_action=False
     ):
         # 初始化交易环境参数
         # df: 原始金融数据DataFrame
@@ -103,6 +104,7 @@ class Testing_Env(gym.Env):
         # max_holding_number: 最大持仓数量
         # initial_action: 初始动作
         
+        self.reward_no_action = reward_no_action
         # 定义动作空间和观测空间
         self.max_holding_number = max_holding_number
         
@@ -287,6 +289,8 @@ class Testing_Env(gym.Env):
         scale_factor = 1
         self.step_times += 1
                 
+        if self.m>=520:
+            pass
         if previous_long_position < long_position:
             # 处理买入操作
             self.buy_size = long_position - previous_long_position # 计算买入数量
@@ -323,10 +327,15 @@ class Testing_Env(gym.Env):
                 self.trade_records.append(trade_record)
                 self.trade_id_counter += 1
             self.current_money = self.current_money - needed_cash
-            self.current_value = self.current_money + self.calculate_value(previous_price_information, current_long_value)
+            self.current_value = self.current_money + self.calculate_value(previous_price_information, long_position)
         elif long_position == 0 and self.previous_long_position ==0 and (self.action_mode == "both" or self.action_mode == "long"):
             #什么都不干，并且没有仓位， 就需要惩罚下一天可能的收益
-            long_reward = ((current_price_information['close']-previous_price_information['close'])*self.max_holding_number)*-1 
+            if self.reward_no_action:
+                long_reward = ((current_price_information['close']-previous_price_information['close'])*self.max_holding_number)*-1 
+            else:
+                long_reward=0
+        elif long_position == 0 and self.previous_long_position ==0 and (self.action_mode == "both" or self.action_mode == "short"):
+            long_reward=0
         # 处理卖出操作
         else:
             # previous_long_position >= long_position:
@@ -356,14 +365,14 @@ class Testing_Env(gym.Env):
             # 计算持仓价值变化
             previous_long_value = self.calculate_value(previous_price_information, self.previous_long_position)
             current_long_value = self.calculate_value(current_price_information, self.long_position)        
-            if self.long_position ==0:
-                # 需要惩罚， 清仓后下一天可能的收益
-                # 惩罚下一天可能的收益 9-10 跌1 奖励+1    11-10 涨1  惩罚-1
-                long_reward = cash - previous_long_value  - ((current_price_information['close']-previous_price_information['close'])*self.previous_short_position)
-            else:
-                long_reward = (current_long_value + cash) - previous_long_value
+            # if self.long_position ==0:
+            #     # 需要惩罚， 清仓后下一天可能的收益
+            #     # 惩罚下一天可能的收益 9-10 跌1 奖励+1    11-10 涨1  惩罚-1
+            #     long_reward = cash - previous_long_value  - ((current_price_information['close']-previous_price_information['close'])*self.previous_short_position)
+            # else:
+            long_reward = (current_long_value + cash) - previous_long_value
             self.current_money = self.current_money + cash 
-            self.current_value = self.current_money + self.calculate_value(previous_price_information, current_long_value)    
+            self.current_value = self.current_money + self.calculate_value(previous_price_information, self.long_position)    
                 
         if previous_short_position < short_position:
             # 空头加仓（开仓）
@@ -396,10 +405,15 @@ class Testing_Env(gym.Env):
             # 收益 = 上一刻仓位价值 + 开仓的价值 - 手续费- 这下一刻仓位价值       
             short_reward = previous_short_value + (cash_value - commission_fee_amount) - current_short_value 
             self.current_money = self.current_money - cash_out
-            self.current_value = self.current_money + self.calculate_value(previous_price_information, current_short_value)            
+            self.current_value = self.current_money + self.calculate_value(previous_price_information, short_position)            
         
         elif self.short_position == 0 and self.previous_short_position ==0 and (self.action_mode == "both" or self.action_mode == "short"):
-            short_reward =  ((previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-1 
+            if self.reward_no_action:
+                short_reward =  ((previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-1 
+            else:
+                short_reward=0
+        elif self.short_position == 0 and self.previous_short_position ==0 and (self.action_mode == "long"):
+            short_reward=0
         else:
             # elif previous_short_position >= short_position:
             # 空头减仓（平仓）
@@ -429,28 +443,32 @@ class Testing_Env(gym.Env):
             # 计算上一刻和这一刻的仓位价值
             previous_short_value = self.calculate_value(previous_price_information, self.previous_short_position)
             current_short_value = self.calculate_value(current_price_information, self.short_position)
-            if self.short_position == 0:
-                # 没有未来没有仓位
-                # 收益 = 上一刻仓位价值 - 现金流入 - 费用 + 未来的（假设）价差
-                # 惩罚下一天可能的收益 10-9 跌1 奖励1    10-11 涨1  惩罚-1
-                short_reward =  previous_short_value - (cash_value+commission_fee_amount) + ((previous_price_information['close']-current_price_information['close'])*self.previous_short_position)
-            else:
+            # if self.short_position == 0:
+            #     # 没有未来没有仓位
+            #     # 收益 = 上一刻仓位价值 - 现金流入 - 费用 + 未来的（假设）价差
+            #     # 惩罚下一天可能的收益 10-9 跌1 奖励1    10-11 涨1  惩罚-1
+            #     short_reward =  previous_short_value - (cash_value+commission_fee_amount) + ((previous_price_information['close']-current_price_information['close'])*self.previous_short_position)
+            # else:
                 # 收益 = 上一刻仓位价值 - 现金流入 - 费用 - 下一刻仓位价值 
-                short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
+            short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
                 
             self.current_money = self.current_money + cash_in
-            self.current_value = self.current_money + self.calculate_value(previous_price_information, current_short_value)  
+            self.current_value = self.current_money + self.calculate_value(previous_price_information, short_position)  
 
             
         # 更新持仓记录
         if long_position == 0 and self.previous_long_position ==0 and long_position == 0 and self.previous_long_position ==0 and self.action_mode == "both":
             # self.reward = (abs(previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-0.5/scale_factor
-            self.reward = -3 
+            if self.reward_no_action :
+                self.reward = -3 
+            else:
+                self.reward = 0
         else:   
             # 计算总收益
             self.reward = (long_reward + short_reward)/scale_factor
         self.reward_history.append(self.reward)
-        
+        return_margin, pure_balance, required_money, commission_fee = self.get_final_return_rate()
+        # log.info(f"m:{self.m}, price: {current_price_information['close']}, action: {action}, self.current_money: {self.current_money:.2f}, self.current_value: {self.current_value:.2f}, reward: {self.reward}, return_margin: {return_margin:.2f}, pure_balance: {pure_balance:.2f}, required_money: {required_money:.2f}, commission_fee: {commission_fee:.2f}")
         # 更新持仓记录
         self.previous_long_position = self.long_position
         self.previous_short_position = self.short_position   
@@ -482,7 +500,7 @@ class Testing_Env(gym.Env):
                 self.current_money = self.current_money + cash
                 self.current_value = self.current_money
             if self.short_position > 0:
-                close_size = self.short_position
+                close_size = self.shorrequired_moneyt_position
                 cash_in = close_size * previous_price_information['close'] * (1 - self.comission_fee)
                 commission_fee_amount = self.comission_fee * close_size * previous_price_information['close']
                 self.comission_fee_history.append(commission_fee_amount)
@@ -592,6 +610,7 @@ class Training_Env(Testing_Env):
         actions = [],   
         action_mode="long",  
         initial_action = 0,
+        reward_no_action=False,
         alpha=alpha,
     ):
         """
@@ -610,7 +629,7 @@ class Training_Env(Testing_Env):
         """
         super(Training_Env,
               self).__init__(df, tech_indicator_list, tech_indicator_list_trend, clf_list, transcation_cost,
-                             back_time_length, max_holding_number, initial_action, actions, action_mode)
+                             back_time_length, max_holding_number, initial_action, actions, action_mode,reward_no_action)
         # 构建 Q 表（用于强化学习策略优化）
         if q_table_dict.get(df_path,None) is None:  
             q_table_file = self._generate_q_table_filename(action_mode, num_action, df_path,q_table_path)
@@ -624,24 +643,26 @@ class Training_Env(Testing_Env):
                     log.info(f"从文件加载Q表: {q_table_file}")
                 except Exception as e:
                     log.warning(f"加载Q表文件失败 {q_table_file}: {e}, 重新计算Q表")
-                    q_table_reward = self._compute_q_table(df, actions, num_action, max_holding_number, transcation_cost, action_mode)
+                    q_table_reward = self._compute_q_table(df, actions, num_action, max_holding_number, transcation_cost, action_mode,reward_no_action)
                     # 保存计算后的Q表到文件
                     with open(q_table_file, 'wb') as f:
                         pickle.dump(q_table_reward, f)
                     log.info(f"Q表计算完成并保存到: {q_table_file}")
             else:
                 # 文件不存在，计算Q表
-                q_table_reward = self._compute_q_table(df, actions, num_action, max_holding_number, transcation_cost, action_mode)
+                q_table_reward = self._compute_q_table(df, actions, num_action, max_holding_number, transcation_cost, action_mode,reward_no_action)
                 # 保存计算后的Q表到文件
                 with open(q_table_file, 'wb') as f:
                     pickle.dump(q_table_reward, f)
                 log.info(f"Q表计算完成并保存到: {q_table_file}") 
             q_table_dict[df_path] = q_table_reward
         self.q_table = q_table_dict[df_path]
+        
+        log.info(f"q_table: {self.q_table}")
         # 记录初始动作
         self.initial_action = initial_action
         
-    def _compute_q_table(self, df, actions, num_action, max_holding, commission_fee, action_mode):
+    def _compute_q_table(self, df, actions, num_action, max_holding, commission_fee, action_mode,reward_no_action):
         """
         计算Q表的辅助方法
         """
@@ -649,8 +670,9 @@ class Training_Env(Testing_Env):
                                   actions=actions,
                                   num_action=num_action,
                                   max_holding=max_holding,
-                                  commission_fee=commission_fee,
+                                  commission_fee=0.001,
                                   action_mode=action_mode,
+                                  reward_no_action=reward_no_action,
                                   reward_scale=1,
                                   gamma=0.99,
                                   max_punish=1e12)
