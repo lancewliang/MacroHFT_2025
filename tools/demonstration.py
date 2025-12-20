@@ -180,5 +180,5 @@ def make_q_table_reward(df: pd.DataFrame,
                 total_reward = reward_scale * total_reward
                 _q_value = total_reward + gamma * np.max(q_table[len(df) - t + 1][current_action_index][:])
                 q_table[len(df) - t][previous_action_index][current_action_index] = _q_value
-                # log.info(f"t={t}, previous_action_index={previous_action_index}, current_action_index={current_action_index}, total_reward={total_reward}, _q_value={_q_value}")
+                #log.debug(f"t={t}, previous_action_index={previous_action_index}, current_action_index={current_action_index}, total_reward={total_reward}, _q_value={_q_value}")
     return q_table

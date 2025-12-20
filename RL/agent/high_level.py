@@ -44,8 +44,8 @@ def config_log(logs_dir,pfx=''):
     file_path = os.path.join(logs_dir, pfx+file_name)
 
     # 创建一个日志格式化器
-    # formatter = Formatter('%(asctime)s %(levelname)s: %(message)s')
-    formatter = Formatter('%(message)s')
+    formatter = Formatter('%(asctime)s %(levelname)s: %(message)s')
+    # formatter = Formatter('%(message)s')
     # 创建文件处理器并设置格式化器
     file_handler = FileHandler(file_path, encoding='utf-8')
     file_handler.setFormatter(formatter)
@@ -69,9 +69,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
+parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
+parser.add_argument("--lr", type=float, default=1e-5)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
@@ -123,7 +123,7 @@ class DQN(object):
             self.device = torch.device("cpu")
             
 
-        self.epsilon_device = torch.device("cpu") 
+        self.epsilon_device = torch.device(args.device) 
 
         log.info(args)    
             
@@ -178,11 +178,11 @@ class DQN(object):
         self.epsilon_hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.epsilon_device)
         self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
         self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
-        log.info(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
+        log.debug(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
         self.hyperagent_target.load_state_dict(self.hyperagent.state_dict())
         self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
         self.epsilon_hyperagent.eval()
-        log.info(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
+        log.debug(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
         
                        
         low_level_hidden_dim = 64  #*8
@@ -328,11 +328,11 @@ class DQN(object):
         # Sample transition from replay buffer & move to device
         # 从经验回放缓冲区采样并移动到指定设备
         batch, _, _ = replay_buffer.sample()
-        # log.info("sample")
-        # log.info(batch)
-        # batch = {k: v for k, v in batch.items()}
+        # log.debug("sample")
+        #log.debug(batch)
+        batch = {k: v.to(self.device) for k, v in batch.items()}
         # Calculate current and target hypernetwork outputs
-        # 计算当前和目标超网络输出
+        # 计算当前和目标超网络pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) .header输出
         w_current = self.hyperagent(batch['state'], batch['state_trend'], batch['state_clf'], batch['previous_action'])
         w_next = self.hyperagent_target(batch['next_state'], batch['next_state_trend'], batch['next_state_clf'], batch['next_previous_action'])
         w_next_ = self.hyperagent(batch['next_state'], batch['next_state_trend'], batch['next_state_clf'], batch['next_previous_action'])
@@ -387,7 +387,7 @@ class DQN(object):
         loss = td_error + args.alpha * memory_error + args.beta * KL_loss
         self.optimizer.zero_grad()
         loss.backward()
-        # log.info(f"loss: {loss.item()} td_error: {td_error.item()} memory_error: {memory_error.item()} KL_loss: {KL_loss.item()}")
+        #log.debug(f"loss: {loss.item()} td_error: {td_error.item()} memory_error: {memory_error.item()} KL_loss: {KL_loss.item()}")
         torch.nn.utils.clip_grad_norm_(self.hyperagent.parameters(), 1)
         self.optimizer.step()
         for param, target_param in zip(self.hyperagent.parameters(), self.hyperagent_target.parameters()):
@@ -444,12 +444,12 @@ class DQN(object):
             # 选择最大Q值的动作 (根据动作q值，选择动作， max()[1]选择的数组下标,max()[0] q值)
             action = torch.max(actions_value, 1)[1].data.cpu().numpy()
             action = action[0]
-            #log.info(f"select_action epsilon: {action} {previous_action} {w.data.cpu().numpy()}")
-            # log.info(f"  {qs}")
+            #log.debug(f"select_action epsilon: {action} {previous_action} {w.data.cpu().numpy()}")
+            # log.debug(f"  {qs}")
         else:
             action_choice = [0,1]
             action = random.choice(action_choice)
-            #log.info(f"select_action random: {action}")
+            #log.debug(f"select_action random: {action}")
         return action
 
     def q_estimate(self, state, state_trend, state_clf, info):
@@ -591,7 +591,7 @@ class DQN(object):
             # 查询记忆库中的Q值
             # Query Q-value from memory
             q_memory = self.memory.query(hs, action)
-            # log.info(f"info {info} hs {hs} q_memory={q_memory}")
+            # log.debug(f"info {info} hs {hs} q_memory={q_memory}")
             # 计算目标Q值
             # Calculate target Q-value
             q = reward + self.gamma * (1 - done) * self.q_estimate(next_single_state, next_trend_state, next_clf_state, next_info)
@@ -606,7 +606,7 @@ class DQN(object):
             # Store transition in replay buffer
             experience = (single_state, trend_state, clf_state, previous_action, demo_action, action, reward, 
                      next_single_state, next_trend_state, next_clf_state, next_previous_action, next_demo_action, done, q_memory)
-            temp_experience_buffer.append(experience)
+            self.replay_buffer.store_transition(*experience)
 
             episode_reward_sum += reward
 
@@ -617,11 +617,7 @@ class DQN(object):
             if step_counter % self.eval_update_freq == 0 and step_counter > (self.batch_size + self.n_step):
                 log.info(f"update network {step_counter}")
                 
-                # log.info(f"批量存储 {len(temp_experience_buffer)} 条经验到replay buffer")
-                if temp_experience_buffer:
-                    for exp in temp_experience_buffer:
-                        self.replay_buffer.store_transition(*exp)
-                    temp_experience_buffer.clear()  # 清空临时缓冲区                
+                # log.info(f"批量存储 {len(temp_experience_buffer)} 条经验到replay buffer")                         
                 for i in range(self.update_times):
                     td_error, memory_error, KL_loss, q_eval, q_target = self.update(self.replay_buffer)
                     if self.update_counter % self.q_value_memorize_freq == 1:
@@ -630,8 +626,8 @@ class DQN(object):
                         self.writer.add_scalar(tag="KL_loss", scalar_value=KL_loss.cpu(), global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_eval", scalar_value=q_eval.cpu(), global_step=self.update_counter, walltime=None)
                         self.writer.add_scalar(tag="q_target", scalar_value=q_target.cpu(), global_step=self.update_counter, walltime=None)
-                    _state_dict = self.hyperagent.state_dict()
-                    # log.info("_state_dict {_state_dict}")
+                    # _state_dict = self.hyperagent.state_dict()
+                    # log.debug("_state_dict {_state_dict}")
                 self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
                 self.epsilon_hyperagent.to(self.epsilon_device)
                 self.epsilon_hyperagent.eval()

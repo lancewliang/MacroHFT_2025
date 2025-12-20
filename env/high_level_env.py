@@ -468,7 +468,7 @@ class Testing_Env(gym.Env):
             self.reward = (long_reward + short_reward)/scale_factor
         self.reward_history.append(self.reward)
         return_margin, pure_balance, required_money, commission_fee = self.get_final_return_rate()
-        # log.info(f"m:{self.m}, price: {current_price_information['close']}, action: {action}, self.current_money: {self.current_money:.2f}, self.current_value: {self.current_value:.2f}, reward: {self.reward}, return_margin: {return_margin:.2f}, pure_balance: {pure_balance:.2f}, required_money: {required_money:.2f}, commission_fee: {commission_fee:.2f}")
+        #log.debug(f"m:{self.m}, price: {current_price_information['close']}, action: {action}, self.current_money: {self.current_money:.2f}, self.current_value: {self.current_value:.2f}, reward: {self.reward}, return_margin: {return_margin:.2f}, pure_balance: {pure_balance:.2f}, required_money: {required_money:.2f}, commission_fee: {commission_fee:.2f}")
         # 更新持仓记录
         self.previous_long_position = self.long_position
         self.previous_short_position = self.short_position   
@@ -658,7 +658,7 @@ class Training_Env(Testing_Env):
             q_table_dict[df_path] = q_table_reward
         self.q_table = q_table_dict[df_path]
         
-        log.info(f"q_table: {self.q_table}")
+        #log.debug(f"q_table: {self.q_table}")
         # 记录初始动作
         self.initial_action = initial_action
         
