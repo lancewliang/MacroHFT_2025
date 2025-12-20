@@ -321,8 +321,8 @@ class Testing_Env(gym.Env):
             
         # 更新持仓记录
         self.previous_position = self.position
-        return_margin, pure_balance, required_money, commission_fee = self.get_final_return_rate() 
-        # log.info(f"m:{self.m}, price: {current_price_information['close']}, action: {action}, self.current_money: 0, self.current_value: 0, reward: {self.reward}, return_margin: {return_margin:.2f}, pure_balance: {pure_balance:.2f}, required_money: {required_money:.2f}, commission_fee: {commission_fee:.2f}")
+        #return_margin, pure_balance, required_money, commission_fee = self.get_final_return_rate() 
+        #log.debug(f"m:{self.m}, price: {current_price_information['close']}, action: {action}, self.current_money: 0, self.current_value: 0, reward: {self.reward}, return_margin: {return_margin:.2f}, pure_balance: {pure_balance:.2f}, required_money: {required_money:.2f}, commission_fee: {commission_fee:.2f}")
         
 
         if self.terminal:

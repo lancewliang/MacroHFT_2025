@@ -36,7 +36,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
-parser.add_argument("--batch_size",type=int,default=512)  # 批次大小 / Mini-batch size
+parser.add_argument("--batch_size",type=int,default=1024)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
@@ -51,7 +51,7 @@ parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random se
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
-parser.add_argument("--device",type=str,default="cpu")  # 计算设备 / Computation device cuda:0
+parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--no_risk_return",type=float,default=4.5) #无风险返回率
 parser.add_argument("--exp",type=str,default="exp12")
@@ -79,7 +79,7 @@ class DQN(object):
             self.device = torch.device("cpu")
             
 
-        self.epsilon_device = torch.device("cpu") 
+        self.epsilon_device = torch.device(args.device) 
         self.logs_dir = os.path.join("./logs/high_level", '{}'.format(args.dataset), args.exp)
         os.makedirs(self.logs_dir, exist_ok=True) 
         
@@ -128,12 +128,12 @@ class DQN(object):
         self.epsilon_hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.epsilon_device)
         self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
         self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, 32).to(self.device)
-        log.info(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
+        #(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
         self.hyperagent_target.load_state_dict(self.hyperagent.state_dict())
         self.epsilon_hyperagent.load_state_dict(self.hyperagent.state_dict())
         self.epsilon_hyperagent.eval()
         
-        log.info(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
+        #log.debug(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
         self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
         self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
         self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, 64).to(self.epsilon_device)
@@ -220,6 +220,7 @@ class DQN(object):
         batch, _, _ = replay_buffer.sample()
         # log.info(batch)
         batch = {k: v.to(self.device) for k, v in batch.items()}
+        #log.debug(batch)
         # Calculate current and target hypernetwork outputs
         # 计算当前和目标超网络输出
         w_current = self.hyperagent(batch['state'], batch['state_trend'], batch['state_clf'], batch['previous_action'])
@@ -270,7 +271,7 @@ class DQN(object):
         loss = td_error + args.alpha * memory_error + args.beta * KL_loss
         self.optimizer.zero_grad()
         loss.backward()
-        # log.info(f"loss: {loss.item()} td_error: {td_error.item()} memory_error: {memory_error.item()} KL_loss: {KL_loss.item()}")
+        #log.debug(f"loss: {loss.item()} td_error: {td_error.item()} memory_error: {memory_error.item()} KL_loss: {KL_loss.item()}")
         
         torch.nn.utils.clip_grad_norm_(self.hyperagent.parameters(), 1)
         self.optimizer.step()
@@ -623,7 +624,7 @@ class DQN(object):
         best_return_rate = -float('inf')
         best_model = None
         
-        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) 
+        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") )
         log.info(f"train data length: {len(self.df)}")
         # 初始化经验回放缓冲区
         # Initialize replay buffer for experience storage
@@ -854,7 +855,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
     agent = DQN(args)
-    agent.train()
+    #agent.train()
     final_result_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), args.exp)
     best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), args.exp, 'best_model.pkl')
     agent.test_cluster(best_model_path, final_result_path)
