@@ -425,17 +425,16 @@ class DQN(object):
             # Get Q-values from slope/volatility agents
             # 获取斜率/波动率代理的Q值
             qs = [
-                    self.slope_epsilon_agents[0](x1, x2, previous_action),
-                    self.slope_epsilon_agents[1](x1, x2, previous_action),
-                    self.slope_epsilon_agents[2](x1, x2, previous_action),
-                    self.vol_epsilon_agents[0](x1, x2, previous_action),
-                    self.vol_epsilon_agents[1](x1, x2, previous_action),
-                    self.vol_epsilon_agents[2](x1, x2, previous_action)
+                    self.slope_agents[0](x1, x2, previous_action),
+                    self.slope_agents[1](x1, x2, previous_action),
+                    self.slope_agents[2](x1, x2, previous_action),
+                    self.vol_agents[0](x1, x2, previous_action),
+                    self.vol_agents[1](x1, x2, previous_action),
+                    self.vol_agents[2](x1, x2, previous_action)
             ]
             # Calculate hypernetwork output
             # 计算超网络输出 6个子代理的权重
-            with torch.no_grad():
-                w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
+            w = self.hyperagent(x1, x2, x3, previous_action)
             # Combine Q-values using hypernetwork weights
             # 使用超网络权重组合Q值
 
@@ -476,17 +475,16 @@ class DQN(object):
         # 获取斜率/波动率代理的Q值
         
         qs = [
-                self.slope_epsilon_agents[0](x1, x2, previous_action),
-                self.slope_epsilon_agents[1](x1, x2, previous_action),
-                self.slope_epsilon_agents[2](x1, x2, previous_action),
-                self.vol_epsilon_agents[0](x1, x2, previous_action),
-                self.vol_epsilon_agents[1](x1, x2, previous_action),
-                self.vol_epsilon_agents[2](x1, x2, previous_action)
+                self.slope_agents[0](x1, x2, previous_action),
+                self.slope_agents[1](x1, x2, previous_action),
+                self.slope_agents[2](x1, x2, previous_action),
+                self.vol_agents[0](x1, x2, previous_action),
+                self.vol_agents[1](x1, x2, previous_action),
+                self.vol_agents[2](x1, x2, previous_action)
         ]
         # Calculate hypernetwork output
         # 计算超网络输出
-        with torch.no_grad():
-            w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
+        w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
         # 形状[1,6]， 6个 子网络的权重，
         # Combine Q-values using hypernetwork weights
         # 使用超网络权重组合Q值  
@@ -571,12 +569,17 @@ class DQN(object):
         episode_reward_sum = 0
         log.info(f" train_env reset done")
         while True:
+            start_time = time.time()
             # 使用ε-greedy策略选择动作
             # Select action using ε-greedy strategy
             action = self.select_action(single_state, trend_state, clf_state, info)
+            start_time2 =time.time()
+            duration1 = start_time2 - start_time
             # 执行环境步进操作
             # Execute environment step
             next_single_state, next_trend_state, next_clf_state, reward, done, next_info = train_env.step(action)
+            start_time3 =time.time()
+            duration2 = start_time3 - start_time2
             # 获取历史动作信息
             # Get historical action information
             previous_action = info['previous_action']
@@ -588,14 +591,19 @@ class DQN(object):
             # 计算隐藏状态
             # Calculate hidden state
             hs = self.calculate_hidden(single_state, trend_state, info)
+            start_time4 =time.time()
+            duration3 = start_time4 - start_time3
             # 查询记忆库中的Q值
             # Query Q-value from memory
             q_memory = self.memory.query(hs, action)
+            start_time5 =time.time()
+            duration4 = start_time5 - start_time4
             # log.debug(f"info {info} hs {hs} q_memory={q_memory}")
             # 计算目标Q值
             # Calculate target Q-value
             q = reward + self.gamma * (1 - done) * self.q_estimate(next_single_state, next_trend_state, next_clf_state, next_info)
-            
+            start_time6 =time.time()
+            duration5 = start_time6 - start_time5
             if np.isnan(q_memory):
                 q_memory = q
             # 更新记忆库
@@ -604,9 +612,9 @@ class DQN(object):
 
             # 存储经验到回放缓冲区
             # Store transition in replay buffer
-            experience = (single_state, trend_state, clf_state, previous_action, demo_action, action, reward, 
-                     next_single_state, next_trend_state, next_clf_state, next_previous_action, next_demo_action, done, q_memory)
-            self.replay_buffer.store_transition(*experience)
+            self.replay_buffer.store_transition(single_state, trend_state, clf_state, previous_action, demo_action, action, reward, next_single_state, next_trend_state, next_clf_state, next_previous_action, next_demo_action, done, q_memory)
+            start_time7 =time.time()
+            duration6 = start_time7 - start_time6
 
             episode_reward_sum += reward
 
@@ -615,8 +623,8 @@ class DQN(object):
             # 定期执行模型更新
             # Periodically update model parameters
             if step_counter % self.eval_update_freq == 0 and step_counter > (self.batch_size + self.n_step):
-                log.info(f"update network {step_counter}")
-                
+                log.info(f"update network {step_counter} start_time {start_time} duration1 {duration1:.6f} duration2 {duration2:.6f} duration3 {duration3:.6f} duration4 {duration4:.6f} duration5 {duration5:.6f} duration6 {duration6:.6f}")
+ 
                 # log.info(f"批量存储 {len(temp_experience_buffer)} 条经验到replay buffer")                         
                 for i in range(self.update_times):
                     td_error, memory_error, KL_loss, q_eval, q_target = self.update(self.replay_buffer)
