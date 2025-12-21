@@ -101,10 +101,10 @@ parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长�
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
-parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
+parser.add_argument("--label",type=str,default="label_2")  # 标签列名称 / Label column name
 parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
-parser.add_argument("--alpha",type=float,default=4)  # KL损失权重系数 / KL loss weight coefficient
-parser.add_argument("--exp",type=str,default="exp4")
+parser.add_argument("--alpha",type=float,default=2)  # KL损失权重系数 / KL loss weight coefficient
+parser.add_argument("--exp",type=str,default="exp4_33")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 
         

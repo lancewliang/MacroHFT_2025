@@ -54,7 +54,7 @@ parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / 
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--no_risk_return",type=float,default=4.5) #无风险返回率
-parser.add_argument("--exp",type=str,default="exp12")
+parser.add_argument("--exp",type=str,default="exp13")
 parser.add_argument("--num_step",type=int,default=10)
 
 
@@ -834,7 +834,7 @@ def config_log(logs_dir,pfx=''):
     file_path = os.path.join(logs_dir, pfx+file_name)
 
     # 创建一个日志格式化器
-    formatter = Formatter('%(message)s')
+    formatter = Formatter('%(asctime)s %(levelname)s: %(message)s')
 
     # 创建文件处理器并设置格式化器
     file_handler = FileHandler(file_path, encoding='utf-8')
@@ -855,7 +855,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
     agent = DQN(args)
-    #agent.train()
+    agent.train()
     final_result_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), args.exp)
     best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), args.exp, 'best_model.pkl')
-    agent.test_cluster(best_model_path, final_result_path)
+    # agent.test_cluster(best_model_path, final_result_path)
