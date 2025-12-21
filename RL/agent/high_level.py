@@ -123,7 +123,7 @@ class DQN(object):
             self.device = torch.device("cpu")
             
 
-        self.epsilon_device = torch.device(args.device) 
+        self.epsilon_device = torch.device("cpu") 
 
         log.info(args)    
             
@@ -186,12 +186,12 @@ class DQN(object):
         
                        
         low_level_hidden_dim = 64  #*8
-        self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
-        self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
-        self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
-        self.vol_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
-        self.vol_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)
-        self.vol_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.device)   
+        self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
+        self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
+        self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
+        self.vol_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
+        self.vol_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
+        self.vol_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)   
         self.slope_epsilon_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
         self.slope_epsilon_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
         self.slope_epsilon_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
@@ -234,12 +234,12 @@ class DQN(object):
             ]
         log.info(f"self.model_list_slope:{model_list_slope}")
         log.info(f"self.model_list_vol:{model_list_vol}")
-        self.slope_1.load_state_dict(torch.load(model_list_slope[0], map_location=self.device))
-        self.slope_2.load_state_dict(torch.load(model_list_slope[1], map_location=self.device))
-        self.slope_3.load_state_dict(torch.load(model_list_slope[2], map_location=self.device))
-        self.vol_1.load_state_dict(torch.load(model_list_vol[0], map_location=self.device))
-        self.vol_2.load_state_dict(torch.load(model_list_vol[1], map_location=self.device))
-        self.vol_3.load_state_dict(torch.load(model_list_vol[2], map_location=self.device))
+        self.slope_1.load_state_dict(torch.load(model_list_slope[0], map_location=self.epsilon_device))
+        self.slope_2.load_state_dict(torch.load(model_list_slope[1], map_location=self.epsilon_device))
+        self.slope_3.load_state_dict(torch.load(model_list_slope[2], map_location=self.epsilon_device))
+        self.vol_1.load_state_dict(torch.load(model_list_vol[0], map_location=self.epsilon_device))
+        self.vol_2.load_state_dict(torch.load(model_list_vol[1], map_location=self.epsilon_device))
+        self.vol_3.load_state_dict(torch.load(model_list_vol[2], map_location=self.epsilon_device))
         self.slope_1.eval()
         self.slope_2.eval()
         self.slope_3.eval()
@@ -294,7 +294,7 @@ class DQN(object):
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
         episodicmemory_dim = 64 #*4
-        self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, episodicmemory_dim, self.epsilon_device)
+        self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, episodicmemory_dim, self.device)
         self.no_risk_return = args.no_risk_return
         self.best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record 
         self.validation_queue = queue.Queue(maxsize=10)  # 验证任务队列，限制大小避免内存溢出
@@ -327,10 +327,10 @@ class DQN(object):
         """
         # Sample transition from replay buffer & move to device
         # 从经验回放缓冲区采样并移动到指定设备
-        batch, _, _ = replay_buffer.sample()
+        cpu_batch, _, _ = replay_buffer.sample()
         # log.debug("sample")
         #log.debug(batch)
-        batch = {k: v.to(self.device) for k, v in batch.items()}
+        batch = {k: v.to(self.device) for k, v in cpu_batch.items()}
         # Calculate current and target hypernetwork outputs
         # 计算当前和目标超网络pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) .header输出
         w_current = self.hyperagent(batch['state'], batch['state_trend'], batch['state_clf'], batch['previous_action'])
@@ -339,27 +339,27 @@ class DQN(object):
 
         # Compute Q-values from slope/volatility agents
         # 计算斜率/波动率代理的Q值
-        batch_state = batch['state']
-        batch_state_trend= batch['state_trend']
-        batch_previous_action= batch['previous_action']
-        batch_next_state = batch['next_state']
-        batch_next_state_trend= batch['next_state_trend']
-        batch_next_previous_action= batch['next_previous_action']
+        batch_state = cpu_batch['state']
+        batch_state_trend= cpu_batch['state_trend']
+        batch_previous_action= cpu_batch['previous_action']
+        batch_next_state = cpu_batch['next_state']
+        batch_next_state_trend= cpu_batch['next_state_trend']
+        batch_next_previous_action= cpu_batch['next_previous_action']
         qs_current = [
-                    self.slope_agents[0](batch_state, batch_state_trend, batch_previous_action),
-                    self.slope_agents[1](batch_state, batch_state_trend, batch_previous_action),
-                    self.slope_agents[2](batch_state, batch_state_trend, batch_previous_action),
-                    self.vol_agents[0](batch_state, batch_state_trend, batch_previous_action),
-                    self.vol_agents[1](batch_state, batch_state_trend, batch_previous_action),
-                    self.vol_agents[2](batch_state, batch_state_trend, batch_previous_action)
+                    self.slope_agents[0](batch_state, batch_state_trend, batch_previous_action).to(self.device),
+                    self.slope_agents[1](batch_state, batch_state_trend, batch_previous_action).to(self.device),
+                    self.slope_agents[2](batch_state, batch_state_trend, batch_previous_action).to(self.device),
+                    self.vol_agents[0](batch_state, batch_state_trend, batch_previous_action).to(self.device),
+                    self.vol_agents[1](batch_state, batch_state_trend, batch_previous_action).to(self.device),
+                    self.vol_agents[2](batch_state, batch_state_trend, batch_previous_action).to(self.device)
         ]
         qs_next = [
-                    self.slope_agents[0](batch_next_state, batch_next_state_trend, batch_next_previous_action),
-                    self.slope_agents[1](batch_next_state, batch_next_state_trend, batch_next_previous_action),
-                    self.slope_agents[2](batch_next_state, batch_next_state_trend, batch_next_previous_action),
-                    self.vol_agents[0](batch_next_state, batch_next_state_trend, batch_next_previous_action),
-                    self.vol_agents[1](batch_next_state, batch_next_state_trend, batch_next_previous_action),
-                    self.vol_agents[2](batch_next_state, batch_next_state_trend, batch_next_previous_action)
+                    self.slope_agents[0](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
+                    self.slope_agents[1](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device), 
+                    self.slope_agents[2](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
+                    self.vol_agents[0](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
+                    self.vol_agents[1](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device),
+                    self.vol_agents[2](batch_next_state, batch_next_state_trend, batch_next_previous_action).to(self.device)
         ]
         # Calculate Q distribution and gather selected actions
         # 计算Q分布并收集选定动作
@@ -425,16 +425,16 @@ class DQN(object):
             # Get Q-values from slope/volatility agents
             # 获取斜率/波动率代理的Q值
             qs = [
-                    self.slope_agents[0](x1, x2, previous_action),
-                    self.slope_agents[1](x1, x2, previous_action),
-                    self.slope_agents[2](x1, x2, previous_action),
-                    self.vol_agents[0](x1, x2, previous_action),
-                    self.vol_agents[1](x1, x2, previous_action),
-                    self.vol_agents[2](x1, x2, previous_action)
+                    self.slope_epsilon_agents[0](x1, x2, previous_action),
+                    self.slope_epsilon_agents[1](x1, x2, previous_action),
+                    self.slope_epsilon_agents[2](x1, x2, previous_action),
+                    self.vol_epsilon_agents[0](x1, x2, previous_action),
+                    self.vol_epsilon_agents[1](x1, x2, previous_action),
+                    self.vol_epsilon_agents[2](x1, x2, previous_action)
             ]
             # Calculate hypernetwork output
             # 计算超网络输出 6个子代理的权重
-            w = self.hyperagent(x1, x2, x3, previous_action)
+            w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
             # Combine Q-values using hypernetwork weights
             # 使用超网络权重组合Q值
 
@@ -475,16 +475,20 @@ class DQN(object):
         # 获取斜率/波动率代理的Q值
         
         qs = [
-                self.slope_agents[0](x1, x2, previous_action),
-                self.slope_agents[1](x1, x2, previous_action),
-                self.slope_agents[2](x1, x2, previous_action),
-                self.vol_agents[0](x1, x2, previous_action),
-                self.vol_agents[1](x1, x2, previous_action),
-                self.vol_agents[2](x1, x2, previous_action)
+                self.slope_epsilon_agents[0](x1, x2, previous_action).to(self.device),
+                self.slope_epsilon_agents[1](x1, x2, previous_action).to(self.device),
+                self.slope_epsilon_agents[2](x1, x2, previous_action).to(self.device),
+                self.vol_epsilon_agents[0](x1, x2, previous_action).to(self.device),
+                self.vol_epsilon_agents[1](x1, x2, previous_action).to(self.device),
+                self.vol_epsilon_agents[2](x1, x2, previous_action).to(self.device)
         ]
+        x1 = x1.to(self.device)
+        x2 = x2.to(self.device)
+        x3 = x3.to(self.device)
+        previous_action = previous_action.to(self.device)
         # Calculate hypernetwork output
         # 计算超网络输出
-        w = self.epsilon_hyperagent(x1, x2, x3, previous_action)
+        w = self.hyperagent(x1, x2, x3, previous_action)
         # 形状[1,6]， 6个 子网络的权重，
         # Combine Q-values using hypernetwork weights
         # 使用超网络权重组合Q值  
@@ -509,13 +513,13 @@ class DQN(object):
         """
         # Convert input data to PyTorch tensors and move to target device
         # 转换输入数据为张量并移动到目标设备
-        x1 = torch.FloatTensor(state).to(self.epsilon_device)
-        x2 = torch.FloatTensor(state_trend).to(self.epsilon_device)
-        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.epsilon_device), 0).to(self.epsilon_device)
+        x1 = torch.FloatTensor(state).to(self.device)
+        x2 = torch.FloatTensor(state_trend).to(self.device)
+        previous_action = torch.unsqueeze(torch.tensor(info["previous_action"]).long().to(self.device), 0).to(self.device)
         with torch.no_grad():
             # Encode to get hidden state representation
             # 编码获取隐藏状态表示
-            hs = self.epsilon_hyperagent.encode(x1, x2, previous_action).cpu().numpy()
+            hs = self.hyperagent.encode(x1, x2, previous_action).cpu().numpy()
         return hs
     
     
@@ -642,7 +646,7 @@ class DQN(object):
                 if step_counter > 4320:
                     # 定期重新编码记忆, 因为超代理的隐藏层训练后发生了变化，
                     # Periodically re-encode memory
-                    self.memory.re_encode(self.epsilon_hyperagent)
+                    self.memory.re_encode(self.hyperagent)
                 return_margin, final_balance, required_money, commission_fee = train_env.get_final_return_rate()                
                 log.info(f"update network {step_counter} return_margin:{return_margin:.2f},final_balance:{final_balance:.2f},required_money:{required_money:.2f},commission_fee:{commission_fee:.2f}")
             
