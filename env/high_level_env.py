@@ -313,17 +313,17 @@ class Testing_Env(gym.Env):
             # self.return_rate = return_rate
             # 记录交易信息
             if self.buy_size > 0:  # 只有实际发生交易时才记录
-                # trade_record = {
-                #     'id': self.trade_id_counter,
-                #     'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
-                #     'amount': needed_cash,
-                #     'quantity': self.buy_size,
-                #     'direction': 'long',
-                #     'commission_fee': commission_fee_amount,
-                #     'type': 'buy',                     
-                #     'price': previous_price_information['close']
-                # }
-                # self.trade_records.append(trade_record)
+                trade_record = {
+                    'id': self.trade_id_counter,
+                    'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
+                    'amount': needed_cash,
+                    'quantity': self.buy_size,
+                    'direction': 'long',
+                    'commission_fee': commission_fee_amount,
+                    'type': 'buy',                     
+                    'price': previous_price_information['close']
+                }
+                self.trade_records.append(trade_record)
                 self.trade_id_counter += 1
             self.current_money = self.current_money - needed_cash
             self.current_value = self.current_money + self.calculate_value(previous_price_information, long_position)
@@ -349,17 +349,17 @@ class Testing_Env(gym.Env):
             self.long_position = long_position
             # 记录交易信息
             if self.sell_size > 0:  # 只有实际发生交易时才记录
-                # trade_record = {
-                #     'id': self.trade_id_counter,
-                #     'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
-                #     'amount': cash,
-                #     'quantity': self.sell_size,
-                #     'direction': 'long',
-                #     'commission_fee': commission_fee_amount,
-                #     'type': 'sell',                     
-                #     'price': previous_price_information['close']
-                # }
-                # self.trade_records.append(trade_record)
+                trade_record = {
+                    'id': self.trade_id_counter,
+                    'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
+                    'amount': cash,
+                    'quantity': self.sell_size,
+                    'direction': 'long',
+                    'commission_fee': commission_fee_amount,
+                    'type': 'sell',                     
+                    'price': previous_price_information['close']
+                }
+                self.trade_records.append(trade_record)
                 self.trade_id_counter += 1
             # 计算持仓价值变化
             previous_long_value = self.calculate_value(previous_price_information, self.previous_long_position)
@@ -385,17 +385,17 @@ class Testing_Env(gym.Env):
             self.needed_money_memory.append(cash_out)
             # 记录交易信息
             if open_size > 0:  # 只有实际发生交易时才记录
-                # trade_record = {
-                #     'id': self.trade_id_counter,
-                #     'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
-                #     'amount': cash_out,
-                #     'quantity': open_size,
-                #     'direction': 'short',
-                #     'commission_fee': commission_fee_amount,
-                #     'type': 'sell',                     
-                #     'price': previous_price_information['close']
-                # }
-                # self.trade_records.append(trade_record)
+                trade_record = {
+                    'id': self.trade_id_counter,
+                    'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
+                    'amount': cash_out,
+                    'quantity': open_size,
+                    'direction': 'short',
+                    'commission_fee': commission_fee_amount,
+                    'type': 'sell',                     
+                    'price': previous_price_information['close']
+                }
+                self.trade_records.append(trade_record)
                 self.trade_id_counter += 1
             # 空头开仓时获得现金，但需要承担未来平仓的风险
             # 计算上一刻和这一刻的仓位价值
@@ -426,17 +426,17 @@ class Testing_Env(gym.Env):
             self.needed_money_memory.append(0)   
             # 记录交易信息
             if close_size > 0:  # 只有实际发生交易时才记录
-                # trade_record = {
-                #     'id': self.trade_id_counter,
-                #     'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
-                #     'amount': cash_in,
-                #     'quantity': close_size,
-                #     'direction': 'short',
-                #     'commission_fee': commission_fee_amount,
-                #     'type': 'buy',                     
-                #     'price': previous_price_information['close']
-                # }
-                # self.trade_records.append(trade_record)
+                trade_record = {
+                    'id': self.trade_id_counter,
+                    'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
+                    'amount': cash_in,
+                    'quantity': close_size,
+                    'direction': 'short',
+                    'commission_fee': commission_fee_amount,
+                    'type': 'buy',                     
+                    'price': previous_price_information['close']
+                }
+                self.trade_records.append(trade_record)
                 self.trade_id_counter += 1         
             # 空头收益计算：开仓时卖出，平仓时买入
             # 计算上一刻和这一刻的仓位价值
@@ -484,17 +484,17 @@ class Testing_Env(gym.Env):
                 self.needed_money_memory.append(0)
                 self.long_position = 0
                 if self.sell_size > 0:  # 只有实际发生交易时才记录
-                    # trade_record = {
-                    #     'id': self.trade_id_counter,
-                    #     'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
-                    #     'amount': cash,
-                    #     'quantity': self.sell_size,
-                    #     'direction': 'long',
-                    #     'commission_fee': commission_fee_amount,
-                    #     'type': 'sell',                     
-                    #     'price': previous_price_information['close']
-                    # }
-                    # self.trade_records.append(trade_record)
+                    trade_record = {
+                        'id': self.trade_id_counter,
+                        'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
+                        'amount': cash,
+                        'quantity': self.sell_size,
+                        'direction': 'long',
+                        'commission_fee': commission_fee_amount,
+                        'type': 'sell',                     
+                        'price': previous_price_information['close']
+                    }
+                    self.trade_records.append(trade_record)
                     self.trade_id_counter += 1    
                 self.current_money = self.current_money + cash
                 self.current_value = self.current_money
@@ -508,17 +508,17 @@ class Testing_Env(gym.Env):
                 self.short_position = 0
                 
                 if close_size > 0:  # 只有实际发生交易时才记录
-                    # trade_record = {
-                    #     'id': self.trade_id_counter,
-                    #     'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
-                    #     'amount': cash_in,
-                    #     'quantity': close_size,
-                    #     'direction': 'short',
-                    #     'commission_fee': commission_fee_amount,
-                    #     'type': 'buy',                     
-                    #     'price': previous_price_information['close']
-                    # }
-                    # self.trade_records.append(trade_record)
+                    trade_record = {
+                        'id': self.trade_id_counter,
+                        'datetime': previous_price_information['timestamp'],  # 使用date作为交易时间
+                        'amount': cash_in,
+                        'quantity': close_size,
+                        'direction': 'short',
+                        'commission_fee': commission_fee_amount,
+                        'type': 'buy',                     
+                        'price': previous_price_information['close']
+                    }
+                    self.trade_records.append(trade_record)
                     self.trade_id_counter += 1    
                 self.current_money = self.current_money + cash_in
                 self.current_value = self.current_money

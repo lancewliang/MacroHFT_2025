@@ -1009,7 +1009,14 @@ class HIGH_LEVEL_DQN_TEST(DQN):
     def test_cluster(self, epoch_path, save_path):     
         log.info(f"开始测试: epoch {epoch_path}")
         self.hyperagent.load_state_dict(torch.load(epoch_path))
+        self.hyperagent.to(self.device)
         self.hyperagent.eval()
+        self.slope_1.to(self.device)
+        self.slope_2.to(self.device)
+        self.slope_3.to(self.device)
+        self.vol_1.to(self.device)
+        self.vol_2.to(self.device)
+        self.vol_3.to(self.device)
         counter = False
         action_list = []
         reward_list = []
@@ -1115,7 +1122,7 @@ if __name__ == "__main__":
     
     config_log(logs_dir,pfx='')
     agent = DQN(args)
-    agent.train()
+    #agent.train()
     time.sleep(60)
     final_result_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), agent.exp)
     best_model_path = os.path.join("./result/high_level", '{}'.format(agent.dataset), agent.exp, 'best_model' ,'best_model.pkl')
