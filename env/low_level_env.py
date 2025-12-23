@@ -84,6 +84,7 @@ class Testing_Env(gym.Env):
         actions=[],
         action_mode="long",
         initial_action=0,
+        reward_no_action=False
     ):
         # 初始化交易环境参数
         # df: 原始金融数据DataFrame
@@ -93,9 +94,11 @@ class Testing_Env(gym.Env):
         # back_time_length: 状态回溯时间长度
         # max_holding_number: 最大持仓数量
         # initial_action: 初始动作
+        
         initial_action_detail = actions[initial_action]
         initial_long_action = initial_action_detail[0]
         initial_short_action = initial_action_detail[1]
+        self.reward_no_action = reward_no_action
         # 定义动作空间和观测空间
         self.actions = actions
         self.tech_indicator_list = tech_indicator_list
@@ -291,7 +294,10 @@ class Testing_Env(gym.Env):
                 self.trade_id_counter += 1
         elif long_position == 0 and self.previous_long_position ==0 and (self.action_mode == "both" or self.action_mode == "long"):
             #什么都不干，并且没有仓位， 就需要惩罚下一天可能的收益
-            long_reward = ((current_price_information['close']-previous_price_information['close'])*self.max_holding_number)*-1 
+            if self.reward_no_action:
+                long_reward = ((current_price_information['close']-previous_price_information['close'])*self.max_holding_number)*-1 
+            else:
+                long_reward=0
         # 处理卖出操作
         else:
             # previous_long_position >= long_position:
@@ -319,12 +325,12 @@ class Testing_Env(gym.Env):
             # 计算持仓价值变化
             previous_long_value = self.calculate_value(previous_price_information, self.previous_long_position)
             current_long_value = self.calculate_value(current_price_information, self.long_position)        
-            if self.long_position ==0:
+            #if self.long_position ==0:
                 # 需要惩罚， 清仓后下一天可能的收益
                 # 惩罚下一天可能的收益 9-10 跌1 奖励+1    11-10 涨1  惩罚-1
-                long_reward = cash - previous_long_value  - ((current_price_information['close']-previous_price_information['close'])*self.previous_short_position)
-            else:
-                long_reward = (current_long_value + cash) - previous_long_value
+            #    long_reward = cash - previous_long_value  - ((current_price_information['close']-previous_price_information['close'])*self.previous_short_position)
+            #else:
+            long_reward = (current_long_value + cash) - previous_long_value
                                     
             # # 卖出奖励计算：当前价值 + 现金流入 - 上一时刻价值
             # self.reward = current_long_value + cash - previous_long_value
@@ -373,7 +379,12 @@ class Testing_Env(gym.Env):
             short_reward = previous_short_value + (cash_value - commission_fee_amount) - current_short_value         
         
         elif self.short_position == 0 and self.previous_short_position ==0 and (self.action_mode == "both" or self.action_mode == "short"):
-            short_reward =  ((previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-1 
+            if self.reward_no_action:
+                short_reward =  ((previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-1 
+            else:
+                short_reward=0
+        elif self.short_position == 0 and self.previous_short_position ==0 and (self.action_mode == "long"):
+            short_reward=0
         else:
             # elif previous_short_position >= short_position:
             # 空头减仓（平仓）
@@ -402,14 +413,14 @@ class Testing_Env(gym.Env):
             # 计算上一刻和这一刻的仓位价值
             previous_short_value = self.calculate_value(previous_price_information, self.previous_short_position)
             current_short_value = self.calculate_value(current_price_information, self.short_position)
-            if self.short_position == 0:
+            #if self.short_position == 0:
                 # 没有未来没有仓位
                 # 收益 = 上一刻仓位价值 - 现金流入 - 费用 + 未来的（假设）价差
                 # 惩罚下一天可能的收益 10-9 跌1 奖励1    10-11 涨1  惩罚-1
-                short_reward =  previous_short_value - (cash_value+commission_fee_amount) + ((previous_price_information['close']-current_price_information['close'])*self.previous_short_position)
-            else:
+            #    short_reward =  previous_short_value - (cash_value+commission_fee_amount) + ((previous_price_information['close']-current_price_information['close'])*self.previous_short_position)
+            #else:
                 # 收益 = 上一刻仓位价值 - 现金流入 - 费用 - 下一刻仓位价值 
-                short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
+            short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
 
         
         if long_position == 0 and self.previous_long_position ==0 and long_position == 0 and self.previous_long_position ==0 and self.action_mode == "both":
@@ -547,6 +558,7 @@ class Training_Env(Testing_Env):
         actions = [],   
         action_mode="long",   
         initial_action =0,
+        reward_no_action=False,
        
     ):
         """
@@ -564,14 +576,14 @@ class Training_Env(Testing_Env):
         """
         super(Training_Env,
               self).__init__(df, tech_indicator_list, tech_indicator_list_trend, transcation_cost,
-                             back_time_length, max_holding_number, actions, action_mode, initial_action)
+                             back_time_length, max_holding_number, actions, action_mode, initial_action,reward_no_action)
         if q_table_dict.get(df_path,None) is None:            
             # 构建 Q 表（用于强化学习策略优化）
             q_table_dict[df_path] = make_q_table_reward(df,
                                             actions=actions,
                                             num_action=num_action,
                                             max_holding=max_holding_number,
-                                            commission_fee=transcation_cost,
+                                            commission_fee=0.001,
                                             action_mode=action_mode,
                                             reward_scale=1,
                                             gamma=0.99,

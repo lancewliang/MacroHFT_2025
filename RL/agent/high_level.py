@@ -1023,7 +1023,7 @@ class HIGH_LEVEL_DQN_TEST(DQN):
         final_balance_list = []
         required_money_list = []
         commission_fee_list = []
-        self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather")) 
+        self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather")) .head(1000)
         log.info(self.df.head(10))
         log.info(self.df.tail(10))
         log.info(len(self.df))

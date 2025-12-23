@@ -317,7 +317,9 @@ def calculate_trading_metrics(df,trade_records,money_history,no_risk_return):
             'win_rate': 0,
             'profit_loss_ratio': 0,
             'total_trades': 0,
-            'trade_frequency': 0
+            'trade_frequency': 0,
+            'alpha': 0,
+                'beta': 0
         }
         
     log.info(profit_loss_records.head(10))

@@ -111,6 +111,7 @@ parser.add_argument("--exp",type=str,default="exp4")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 parser.add_argument("--action_mode",type=str,default="long")  # 动作方向
 parser.add_argument("--action_size",type=int,default=1)  # 动作数量
+parser.add_argument("--reward_no_action",type=bool,default=False)  # 奖励没有动作
         
 def seed_torch(seed):
     random.seed(seed)
@@ -237,6 +238,7 @@ class DQN(object):
         self.alpha = args.alpha
         self.best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record 
         self.validation_queue = queue.Queue(maxsize=10)  # 验证任务队列，限制大小避免内存溢出
+        self.reward_no_action = args.reward_no_action
         
     def update(self, replay_buffer):
         """
@@ -416,7 +418,8 @@ class DQN(object):
                 num_action=self.n_action,     
                 actions= self.actions,  
                 action_mode=self.action_mode,         
-                initial_action=0 )
+                initial_action=0  ,
+                reward_no_action=self.reward_no_action)
         # 重置环境获取初始状态 / Reset environment to get initial state
         single_state, trend_state, info = train_env.reset()
         episode_reward_sum = 0
