@@ -68,7 +68,7 @@ class EVALER(object):
                  ):  
         self.device = torch.device(device) 
         self.val_data_path = val_data_path
-        self.eval_net = subagent(n_state_1, n_state_2, n_action, 512).to(self.device)
+        self.eval_net = subagent(n_state_1, n_state_2, n_action, 64).to(self.device)
 
         self.tech_indicator_list=tech_indicator_list
         self.tech_indicator_list_trend=tech_indicator_list_trend
@@ -266,7 +266,7 @@ class DQN_EVAL(object):
         
         # 准备多进程参数 / Prepare multiprocessing parameters
         # 获取CPU核心数，但限制最大进程数以避免资源耗尽
-        num_processes = 5
+        num_processes = 7
         log.info(f"Using {num_processes} processes for parallel validation df_list:{df_list}")
         
         # 创建参数列表，每个元素是一个包含所有必要参数的元组
@@ -286,7 +286,7 @@ class DQN_EVAL(object):
             # 收集结果
             for result in results:
                 action_list_episode, reward_list_episode, final_balance, required_money, commission_fee, step_times, trade_id_counter = result
-                log.info(f"val _validate_worker  final_balance: {final_balance}, required_money: {required_money}, commission_fee: {commission_fee}, step_times: {step_times}, trade_id_counter: {trade_id_counter}")
+                log.info(f"val {epoch_path} _validate_worker  final_balance: {final_balance}, required_money: {required_money}, commission_fee: {commission_fee}, step_times: {step_times}, trade_id_counter: {trade_id_counter}")
                 action_list.append(action_list_episode)
                 reward_list.append(reward_list_episode)
                 final_balance_list.append(final_balance)
@@ -294,6 +294,6 @@ class DQN_EVAL(object):
                 commission_fee_list.append(commission_fee)
         
         # 保存验证结果并计算平均收益率 / Save validation results and calculate mean return rate
-        return_rate_mean = self._save_val_result(save_path, initial_action, action_list, reward_list, final_balance_list, required_money_list, commission_fee_list)
-        log.info(f"val return_rate_mean:{return_rate_mean}")
+        return_rate_mean = self._save_val_result(save_path, initial_action, action_list, reward_list, final_balance_list, required_money_list, commission_fee_list)*100
+        log.info(f"val {epoch_path} return_rate_mean:{return_rate_mean:.2f}")
         return return_rate_mean

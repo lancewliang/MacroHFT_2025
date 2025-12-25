@@ -29,7 +29,7 @@ from logging import StreamHandler, FileHandler, Formatter
 import logging as log
 import os
 import time
-
+from env.actions import get_actions
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -53,12 +53,14 @@ parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长�
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
-parser.add_argument("--label",type=str,default="label_2")  # 标签列名称 / Label column name
-parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
+parser.add_argument("--label",type=str,default="label_3")  # 标签列名称 / Label column name
+parser.add_argument("--clf",type=str,default="vol")  # 分类器类型 / Classifier type
 parser.add_argument("--alpha",type=float,default=4)  # KL损失权重系数 / KL loss weight coefficient
 parser.add_argument("--exp",type=str,default="exp_default_1")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
-
+parser.add_argument("--action_mode",type=str,default="long")  # 动作方向
+parser.add_argument("--action_size",type=int,default=1)  # 动作数量
+parser.add_argument("--reward_no_action",type=bool,default=False)  # 奖励没有动作
         
 def seed_torch(seed):
     random.seed(seed)
@@ -73,7 +75,7 @@ def seed_torch(seed):
 
 def config_log(logs_dir,pfx=''):
     today = time.strftime('%Y-%m-%d', time.localtime(time.time()))
-    file_name = f'{today}.log'
+    file_name = f'eval-{today}.log'
     if not os.path.exists(logs_dir):
         os.makedirs(logs_dir, exist_ok=True)  # 确保目录存在
     file_path = os.path.join(logs_dir, pfx+file_name)
@@ -114,9 +116,10 @@ if __name__ == "__main__":
     n_state_1 = len(tech_indicator_list)
     n_state_2 = len(tech_indicator_list_trend)
     max_holding_number=0.2
-    label = 2
+    label = int(args.label.split("_")[-1])
+    log.info(f"label: {label}")
     val_data_path = os.path.join(ROOT, "MacroHFT", "data", "ETHUSDT", "val")
-    with open(os.path.join(val_data_path, 'slope_labels.pkl'), 'rb') as file:
+    with open(os.path.join(val_data_path, f'{clf}_labels.pkl'), 'rb') as file:
         val_index = pickle.load(file)
     var_df_list = val_index[label]
     
@@ -124,9 +127,11 @@ if __name__ == "__main__":
     epoch_path = os.path.join(result_path)
     val_path = os.path.join(epoch_path, "val")
     if not os.path.exists(val_path):
-        os.makedirs(val_path)
-    
-    dqn_eval = DQN_EVAL(n_state_1,n_state_2,n_action,"cpu",
+        os.makedirs(val_path) 
+    action_mode = args.action_mode
+    action_size =args.action_size
+    actions, n_action, action_type_desc = get_actions(action_mode, action_size)
+    dqn_eval = DQN_EVAL(n_state_1,n_state_2,actions ,action_mode,n_action,args.device,
                         val_data_path,
                         tech_indicator_list,
                         tech_indicator_list_trend,
