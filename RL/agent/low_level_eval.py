@@ -68,7 +68,7 @@ class EVALER(object):
                  ):  
         self.device = torch.device(device) 
         self.val_data_path = val_data_path
-        self.eval_net = subagent(n_state_1, n_state_2, n_action, 64).to(self.device)
+        self.eval_net = subagent(n_state_1, n_state_2, n_action, 256).to(self.device)
 
         self.tech_indicator_list=tech_indicator_list
         self.tech_indicator_list_trend=tech_indicator_list_trend
