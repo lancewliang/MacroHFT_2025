@@ -71,19 +71,19 @@ parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=8192)  # 批次大小 / Mini-batch size
-parser.add_argument("--eval_update_freq",type=int,default=512)  # 网络更新频率 / Network update frequency
+parser.add_argument("--eval_update_freq",type=int,default=256)  # 网络更新频率 / Network update frequency
 parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning rate
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
-parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
+parser.add_argument("--update_times",type=int,default=20)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
 parser.add_argument("--transcation_cost",type=float,default=2.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=15)  # 训练轮次数 / Training epochs
+parser.add_argument("--epoch_number",type=int,default=10)  # 训练轮次数 / Training epochs
 parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
@@ -175,7 +175,7 @@ class DQN(object):
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
         
-        high_level_hidden_dim = 32  #*4
+        high_level_hidden_dim = 32*4
         self.epsilon_hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.epsilon_device)
         self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
         self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
@@ -186,7 +186,7 @@ class DQN(object):
         log.debug(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
         
                        
-        low_level_hidden_dim = 64  #*8
+        low_level_hidden_dim = 64*4  #*8
         self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
         self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
         self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
@@ -202,14 +202,14 @@ class DQN(object):
         if self.action_mode == "long":
              
             model_list_slope = [
-                "./result/low_level/ETHUSDT/best_model/slope/1/best_model.pkl", 
-                "./result/low_level/ETHUSDT/best_model/slope/2/best_model.pkl",
-                "./result/low_level/ETHUSDT/best_model/slope/3/best_model.pkl"
+                "./result/low_level/ETHUSDT/long_action/slope/1/best_model.pkl", 
+                "./result/low_level/ETHUSDT/long_action/slope/2/best_model.pkl",
+                "./result/low_level/ETHUSDT/long_action/slope/3/best_model.pkl"
             ]
             model_list_vol = [
-                "./result/low_level/ETHUSDT/best_model/vol/1/best_model.pkl",
-                "./result/low_level/ETHUSDT/best_model/vol/2/best_model.pkl",
-                "./result/low_level/ETHUSDT/best_model/vol/3/best_model.pkl"
+                "./result/low_level/ETHUSDT/long_action/vol/1/best_model.pkl",
+                "./result/low_level/ETHUSDT/long_action/vol/2/best_model.pkl",
+                "./result/low_level/ETHUSDT/long_action/vol/3/best_model.pkl"
             ]
         elif self.action_mode == "short":
             model_list_slope = [
@@ -294,7 +294,7 @@ class DQN(object):
         self.decay_length = args.decay_length
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
-        episodicmemory_dim = 64 #*4
+        episodicmemory_dim = 64*4
         self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, episodicmemory_dim, self.device)
         self.no_risk_return = args.no_risk_return
         self.best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record 
@@ -1129,25 +1129,28 @@ def _validate_test_worker(args):
 if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
+    logs_dir = os.path.join("./logs/high_level", '{}'.format(args.dataset), args.exp)
+    os.makedirs(logs_dir, exist_ok=True) 
+    pfx = f""
+    config_log(logs_dir,pfx=pfx)
+    agent = DQN(args)
+    agent.train() 
     
-    #agent = DQN(args)
-    #agent.train() 
-    
-    num_processes = 3
-    args_list = [
+    # num_processes = 3
+    # args_list = [
             
-    ]
-    for i in range(args.epoch_number):
-        args_copy = copy.deepcopy(args)
-        args_copy.i = i+1
-        args_list.append(args_copy)
+    # ]
+    # for i in range(args.epoch_number):
+    #     args_copy = copy.deepcopy(args)
+    #     args_copy.i = i+1
+    #     args_list.append(args_copy)
     
-    with multiprocessing.Pool(processes=num_processes) as pool:
+    # with multiprocessing.Pool(processes=num_processes) as pool:
          
-            results = pool.imap_unordered(_validate_test_worker, args_list)
-            for result in results:
-                print(result)
-                pass
+    #         results = pool.imap_unordered(_validate_test_worker, args_list)
+    #         for result in results:
+    #             print(result)
+    #             pass
             
     
          

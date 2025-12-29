@@ -92,7 +92,7 @@ parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 /
 parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=256)  # 批次大小 / Mini-batch size
 parser.add_argument("--eval_update_freq",type=int,default=50)  # 网络更新频率 / Network update frequency
-parser.add_argument("--lr", type=float, default=1e-6)  # 学习率 / Learning rate
+parser.add_argument("--lr", type=float, default=0.00005)  # 学习率 / Learning rate0.00001
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.1)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=15)  # 探索衰减周期 / Exploration decay length
