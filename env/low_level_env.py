@@ -324,13 +324,16 @@ class Testing_Env(gym.Env):
                 self.trade_id_counter += 1
             # 计算持仓价值变化
             previous_long_value = self.calculate_value(previous_price_information, self.previous_long_position)
-            current_long_value = self.calculate_value(current_price_information, self.long_position)        
-            #if self.long_position ==0:
+            current_long_value = self.calculate_value(current_price_information, self.long_position)       
+            if self.reward_no_action: 
+                if self.long_position ==0:
                 # 需要惩罚， 清仓后下一天可能的收益
                 # 惩罚下一天可能的收益 9-10 跌1 奖励+1    11-10 涨1  惩罚-1
-            #    long_reward = cash - previous_long_value  - ((current_price_information['close']-previous_price_information['close'])*self.previous_short_position)
-            #else:
-            long_reward = (current_long_value + cash) - previous_long_value
+                    long_reward = cash - previous_long_value  - ((current_price_information['close']-previous_price_information['close'])*self.previous_short_position)
+                else:
+                    long_reward = (current_long_value + cash) - previous_long_value
+            else:
+                long_reward = (current_long_value + cash) - previous_long_value
                                     
             # # 卖出奖励计算：当前价值 + 现金流入 - 上一时刻价值
             # self.reward = current_long_value + cash - previous_long_value

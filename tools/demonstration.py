@@ -115,12 +115,15 @@ def make_q_table_reward(df: pd.DataFrame,
                     long_sell_money = long_position_change * current_price_information['close'] * (1 - commission_fee)
                     current_long_value = calculate_value(current_price_information, previous_long_position)
                     future_long_value = calculate_value(future_price_information, current_long_position)
-                    # if current_long_position ==0:
+                    if reward_no_action:
+                        if current_long_position ==0:
                     #     # 需要惩罚， 清仓后下一天可能的收益
                     #     # 惩罚下一天可能的收益 明天-今天价格  9-10 跌1 奖励+1 (应该清仓)   11-10 涨1  惩罚-1 ， (不应该清仓)
-                    #     long_reward = long_sell_money - current_long_value - ((future_price_information['close']-current_price_information['close'])*previous_long_position)
-                    # else:
-                    long_reward = future_long_value + long_sell_money - current_long_value
+                            long_reward = long_sell_money - current_long_value - ((future_price_information['close']-current_price_information['close'])*previous_long_position)
+                        else:
+                            long_reward = future_long_value + long_sell_money - current_long_value
+                    else:
+                        long_reward = future_long_value + long_sell_money - current_long_value
                 
                 # 计算空头持仓奖励
                 short_reward = 0
