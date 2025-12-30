@@ -3,6 +3,6 @@
 #nohup python -u RL/agent/high_level.py --exp 'long_action' --dataset 'ETHUSDT' --transcation_cost 0.0005 --action_mode long --action_size 1 >./logs/high_level/ETHUSDT/long_action_1.log 2>&1 &
 #nohup python -u RL/agent/high_level.py --exp 'exp4_1' --dataset 'ETHUSDT' --transcation_cost 0.0004 --action_mode long --action_size 1 --reward_no_action True >./logs/high_level/ETHUSDT/exp4_1.log 2>&1 &
 #nohup python -u RL/agent/high_level.py --exp 'exp4_2' --dataset 'ETHUSDT' --transcation_cost 0.0004 --action_mode long --action_size 1 --reward_no_action False >./logs/high_level/ETHUSDT/exp4_2.log 2>&1 &
-nohup python -u RL/agent/high_level.py --exp 'long_action' --dataset 'ETHUSDT' --transcation_cost 0.0002 --action_mode long --action_size 1 --reward_no_action False >./logs/high_level/ETHUSDT/long_action_1.log 2>&1 &
+nohup python -u RL/agent/high_level.py --exp 'long_action_5' --dataset 'ETHUSDT' --transcation_cost 0.0005 --action_mode long --action_size 1 --reward_no_action False >./logs/high_level/ETHUSDT/long_action_5.log 2>&1 &
 
 #nohup python -u RL/agent/high_level.py --exp 'short_action' --dataset 'ETHUSDT' --transcation_cost 0.0005 --action_mode short --action_size 1 >./logs/high_level/ETHUSDT/short_action_1.log 2>&1 &
