@@ -1136,21 +1136,21 @@ if __name__ == "__main__":
     agent = DQN(args)
     agent.train() 
     
-    # num_processes = 3
-    # args_list = [
+    num_processes = 3
+    args_list = [
             
-    # ]
-    # for i in range(args.epoch_number):
-    #     args_copy = copy.deepcopy(args)
-    #     args_copy.i = i+1
-    #     args_list.append(args_copy)
+    ]
+    for i in range(args.epoch_number):
+        args_copy = copy.deepcopy(args)
+        args_copy.i = i+1
+        args_list.append(args_copy)
     
-    # with multiprocessing.Pool(processes=num_processes) as pool:
+    with multiprocessing.Pool(processes=num_processes) as pool:
          
-    #         results = pool.imap_unordered(_validate_test_worker, args_list)
-    #         for result in results:
-    #             print(result)
-    #             pass
+            results = pool.imap_unordered(_validate_test_worker, args_list)
+            for result in results:
+                print(result)
+                pass
             
     
          

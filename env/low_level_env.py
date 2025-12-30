@@ -292,12 +292,9 @@ class Testing_Env(gym.Env):
                 }
                 self.trade_records.append(trade_record)
                 self.trade_id_counter += 1
-        elif long_position == 0 and self.previous_long_position ==0 and (self.action_mode == "both" or self.action_mode == "long"):
-            #什么都不干，并且没有仓位， 就需要惩罚下一天可能的收益
-            if self.reward_no_action:
-                long_reward = ((current_price_information['close']-previous_price_information['close'])*self.max_holding_number)*-1 
-            else:
-                long_reward=0
+        elif long_position == 0 and self.previous_long_position ==0 :
+            #什么都不干，并且没有仓位， 就需要惩罚下一天可能的收益             
+            long_reward=0 
         # 处理卖出操作
         else:
             # previous_long_position >= long_position:
@@ -325,15 +322,16 @@ class Testing_Env(gym.Env):
             # 计算持仓价值变化
             previous_long_value = self.calculate_value(previous_price_information, self.previous_long_position)
             current_long_value = self.calculate_value(current_price_information, self.long_position)       
-            if self.reward_no_action: 
-                if self.long_position ==0:
-                # 需要惩罚， 清仓后下一天可能的收益
-                # 惩罚下一天可能的收益 9-10 跌1 奖励+1    11-10 涨1  惩罚-1
-                    long_reward = cash - previous_long_value  - ((current_price_information['close']-previous_price_information['close'])*self.previous_short_position)
-                else:
-                    long_reward = (current_long_value + cash) - previous_long_value
-            else:
-                long_reward = (current_long_value + cash) - previous_long_value
+            # if self.reward_no_action: 
+            #     if self.long_position ==0:
+            #     # 需要惩罚， 清仓后下一天可能的收益
+            #     # 惩罚下一天可能的收益 9-10 跌1 奖励+1    11-10 涨1  惩罚-1
+            #         # long_reward = cash - previous_long_value  - ((current_price_information['close']-previous_price_information['close'])*self.previous_long_position)
+            #         long_reward = 0
+            #     else:
+            #         long_reward = (current_long_value + cash) - previous_long_value
+            # else:
+            long_reward = (current_long_value + cash) - previous_long_value
                                     
             # # 卖出奖励计算：当前价值 + 现金流入 - 上一时刻价值
             # self.reward = current_long_value + cash - previous_long_value
@@ -381,13 +379,8 @@ class Testing_Env(gym.Env):
             # 收益 = 上一刻仓位价值 + 开仓的价值 - 手续费- 这下一刻仓位价值       
             short_reward = previous_short_value + (cash_value - commission_fee_amount) - current_short_value         
         
-        elif self.short_position == 0 and self.previous_short_position ==0 and (self.action_mode == "both" or self.action_mode == "short"):
-            if self.reward_no_action:
-                short_reward =  ((previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-1 
-            else:
-                short_reward=0
-        elif self.short_position == 0 and self.previous_short_position ==0 and (self.action_mode == "long"):
-            short_reward=0
+        elif self.short_position == 0 and self.previous_short_position ==0 : 
+            short_reward=0 
         else:
             # elif previous_short_position >= short_position:
             # 空头减仓（平仓）
@@ -428,7 +421,7 @@ class Testing_Env(gym.Env):
         
         if long_position == 0 and self.previous_long_position ==0 and long_position == 0 and self.previous_long_position ==0 and self.action_mode == "both":
             # self.reward = (abs(previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-0.5/scale_factor
-            self.reward = -3 
+            self.reward = 0
         else:   
             # 计算总收益
             self.reward = (long_reward + short_reward)/scale_factor

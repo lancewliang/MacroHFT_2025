@@ -111,7 +111,7 @@ parser.add_argument("--exp",type=str,default="exp4")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 parser.add_argument("--action_mode",type=str,default="long")  # 动作方向
 parser.add_argument("--action_size",type=int,default=1)  # 动作数量
-parser.add_argument("--reward_no_action",type=bool,default=False)  # 奖励没有动作
+parser.add_argument("--reward_no_action",type=str,default="False")  # 奖励没有动作
         
 def seed_torch(seed):
     random.seed(seed)
@@ -144,7 +144,7 @@ class DQN(object):
         self.result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), args.label, str(int(args.alpha)))
         self.label = int(args.label.split('_')[1])
         
-        
+        self.reward_no_action = args.reward_no_action == "True"
         self.logs_dir = os.path.join("./logs/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), args.label, str(int(args.alpha)))
         os.makedirs(self.logs_dir, exist_ok=True) 
         
@@ -238,7 +238,7 @@ class DQN(object):
         self.alpha = args.alpha
         self.best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record 
         self.validation_queue = queue.Queue(maxsize=10)  # 验证任务队列，限制大小避免内存溢出
-        self.reward_no_action = args.reward_no_action
+
         
     def update(self, replay_buffer):
         """

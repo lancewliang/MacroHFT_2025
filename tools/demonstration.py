@@ -102,11 +102,11 @@ def make_q_table_reward(df: pd.DataFrame,
                     current_long_value = calculate_value(current_price_information, previous_long_position)
                     future_long_value = calculate_value(future_price_information, current_long_position)
                     long_reward = future_long_value - (current_long_value + long_buy_money)
-                elif current_long_action ==0 and previous_long_action ==0 and (action_mode == "both" or action_mode == "long"):
-                    if reward_no_action:
-                        long_reward = (future_price_information['close']-current_price_information['close'])*max_holding*-1 
-                    else:                        
-                        long_reward = 0
+                elif current_long_action ==0 and previous_long_action ==0:
+                    # if reward_no_action:
+                    #     long_reward = (future_price_information['close']-current_price_information['close'])*max_holding*-1 
+                    # else:                        
+                    long_reward = 0
                 else:
                     # 多头卖出操作计算
                     previous_long_position = previous_long_action / scale_factor * max_holding
@@ -115,15 +115,16 @@ def make_q_table_reward(df: pd.DataFrame,
                     long_sell_money = long_position_change * current_price_information['close'] * (1 - commission_fee)
                     current_long_value = calculate_value(current_price_information, previous_long_position)
                     future_long_value = calculate_value(future_price_information, current_long_position)
-                    if reward_no_action:
-                        if current_long_position ==0:
-                    #     # 需要惩罚， 清仓后下一天可能的收益
-                    #     # 惩罚下一天可能的收益 明天-今天价格  9-10 跌1 奖励+1 (应该清仓)   11-10 涨1  惩罚-1 ， (不应该清仓)
-                            long_reward = long_sell_money - current_long_value - ((future_price_information['close']-current_price_information['close'])*previous_long_position)
-                        else:
-                            long_reward = future_long_value + long_sell_money - current_long_value
-                    else:
-                        long_reward = future_long_value + long_sell_money - current_long_value
+                    # if reward_no_action:
+                    #     if current_long_position ==0:
+                    # #     # 需要惩罚， 清仓后下一天可能的收益
+                    # #     # 惩罚下一天可能的收益 明天-今天价格  9-10 跌1 奖励+1 (应该清仓)   11-10 涨1  惩罚-1 ， (不应该清仓)
+                    #         # long_reward = long_sell_money - current_long_value - ((future_price_information['close']-current_price_information['close'])*previous_long_position)
+                    #         long_reward = 0
+                    #     else:
+                    #         long_reward = future_long_value + long_sell_money - current_long_value
+                    # else:
+                    long_reward = future_long_value + long_sell_money - current_long_value
                 
                 # 计算空头持仓奖励
                 short_reward = 0
@@ -140,11 +141,9 @@ def make_q_table_reward(df: pd.DataFrame,
                     # 0 +9.8 -10*1 ping = -0.2
                     # 0 +9.8 -11*1 zhang = -1.2
                     # 0 +9.8 -9*1 die = 0.8
-                elif current_short_action ==0 and previous_short_action ==0 and (action_mode == "both" or action_mode == "short"):
-                    if reward_no_action:
-                        short_reward = (current_price_information['close']-future_price_information['close'])*max_holding*-1 
-                    else:                        
-                        short_reward = 0
+                elif current_short_action ==0 and previous_short_action ==0 :
+                         
+                    short_reward = 0
                 else:
                     # 空头平仓操作计算（相当于买入）
                     previous_short_position = previous_short_action / scale_factor * max_holding
@@ -174,7 +173,7 @@ def make_q_table_reward(df: pd.DataFrame,
                     # 10*2 -10.2 -11*1 zhang = -1.2
                     # 10*2 -10.2 -9*1 die = 0.8
                 if current_short_action ==0 and previous_short_action ==0 and current_long_action ==0 and previous_long_action ==0 and action_mode == "both":
-                    total_reward = -3
+                    total_reward = 0
                     # abs(current_price_information['close']-future_price_information['close'])*max_holding *-0.5 / scale_factor
                     # total_reward = current_price_information['close']*-0.001
                 else:   
