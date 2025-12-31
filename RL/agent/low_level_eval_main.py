@@ -56,10 +56,10 @@ parser.add_argument("--epoch_number",type=int,default=15)  # 训练轮次数 / T
 parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
 parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
 parser.add_argument("--alpha",type=float,default=2)  # KL损失权重系数 / KL loss weight coefficient
-parser.add_argument("--exp",type=str,default="both_action_5_2")
+parser.add_argument("--exp",type=str,default="both_action_5_1")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 parser.add_argument("--action_mode",type=str,default="both")  # 动作方向
-parser.add_argument("--action_size",type=int,default=2)  # 动作数量
+parser.add_argument("--action_size",type=int,default=1)  # 动作数量
 parser.add_argument("--reward_no_action",type=bool,default=False)  # 奖励没有动作
         
 def seed_torch(seed):
