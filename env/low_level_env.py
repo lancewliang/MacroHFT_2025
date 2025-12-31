@@ -123,8 +123,10 @@ class Testing_Env(gym.Env):
         self.initial_action = initial_action
         self.comission_fee = transcation_cost
         self.max_holding_number = max_holding_number
-        self.needed_money_memory = []
-        self.sell_money_memory = []
+        self.long_needed_money_memory = []
+        self.long_sell_money_memory = []
+        self.short_needed_money_memory = []
+        self.short_sell_money_memory = []
         self.comission_fee_history = []
         # 初始化多头和空头仓位
         self.previous_long_position = initial_long_action * self.max_holding_number
@@ -178,8 +180,14 @@ class Testing_Env(gym.Env):
         price_information = self.data.iloc[-1]
         # 重置交易状态
 
-        self.needed_money_memory = []  # 清空买入资金记录
-        self.sell_money_memory = []  # 清空卖出资金记录
+        # self.needed_money_memory = [] 
+        # self.sell_money_memory = [] 
+        
+        self.long_needed_money_memory = [] # 清空买入资金记录
+        self.long_sell_money_memory = [] # 清空卖出资金记录
+        self.short_needed_money_memory = []
+        self.short_sell_money_memory = []
+        
         self.comission_fee_history = []  # 清空手续费记录
         # 设置初始持仓（根据初始动作参数）
         self.previous_long_position = self.initial_long_action * self.max_holding_number
@@ -187,8 +195,15 @@ class Testing_Env(gym.Env):
         self.previous_short_position = self.initial_short_action * self.max_holding_number
         self.short_position = self.initial_short_action * self.max_holding_number
         # 特殊处理：记录初始持仓所需资金
-        self.needed_money_memory.append(self.long_position * self.data.iloc[-1]["close"])
-        self.sell_money_memory.append(0)
+        if self.long_position>0:
+            self.long_needed_money_memory.append(self.long_position * self.data.iloc[-1]["close"])
+            self.long_sell_money_memory.append(0)
+        
+        if self.short_position>0:
+            self.short_needed_money_memory.append(self.short_position * self.data.iloc[-1]["close"])
+            self.short_sell_money_memory.append(0)
+        
+        
         self.step_times = 0
         self.trade_id_counter = 0  # 重置交易ID计数器
         self.trade_records = []  # 清空交易记录
@@ -266,8 +281,8 @@ class Testing_Env(gym.Env):
             needed_cash = self.buy_size * previous_price_information['close'] * (1 + self.comission_fee)
             self.comission_fee_history.append(self.comission_fee * self.buy_size * previous_price_information['close']) # 记录交易成本
             # 更新资金记录
-            self.needed_money_memory.append(needed_cash)  # 买入支出
-            self.sell_money_memory.append(0) # 卖出收入
+            self.long_needed_money_memory.append(needed_cash)  # 买入支出
+            self.long_sell_money_memory.append(0) # 卖出收入
 
             self.long_position = long_position
             # 计算持仓价值变化
@@ -303,8 +318,8 @@ class Testing_Env(gym.Env):
             cash = self.sell_size * previous_price_information['close'] * (1 - self.comission_fee)
             self.comission_fee_history.append(self.comission_fee * self.sell_size * previous_price_information['close']) # 记录交易成本
             # 更新资金记录
-            self.sell_money_memory.append(cash) # 卖出收入
-            self.needed_money_memory.append(0) # 买入支出
+            self.long_sell_money_memory.append(cash) # 卖出收入
+            self.long_needed_money_memory.append(0) # 买入支出
             self.long_position = long_position
             # 记录交易信息
             if self.sell_size > 0:  # 只有实际发生交易时才记录
@@ -357,8 +372,8 @@ class Testing_Env(gym.Env):
             cash_out = cash_value * (1 + self.comission_fee)
             commission_fee_amount = self.comission_fee * open_size * previous_price_information['close']
             self.comission_fee_history.append(commission_fee_amount)
-            self.sell_money_memory.append(0)
-            self.needed_money_memory.append(cash_out)
+            self.short_sell_money_memory.append(0)
+            self.short_needed_money_memory.append(cash_out)
             # 记录交易信息
             if open_size > 0:  # 只有实际发生交易时才记录
                 trade_record = {
@@ -390,8 +405,8 @@ class Testing_Env(gym.Env):
             cash_in = cash_value * (1 - self.comission_fee)
             commission_fee_amount = self.comission_fee * close_size * previous_price_information['close']
             self.comission_fee_history.append(commission_fee_amount)
-            self.sell_money_memory.append(cash_in)
-            self.needed_money_memory.append(0)   
+            self.short_sell_money_memory.append(cash_in)
+            self.short_needed_money_memory.append(0)   
             # 记录交易信息
             if close_size > 0:  # 只有实际发生交易时才记录
                 trade_record = {
@@ -439,8 +454,8 @@ class Testing_Env(gym.Env):
                 cash = self.sell_size * previous_price_information['close'] * (1 - self.comission_fee)
                 commission_fee_amount = self.comission_fee * self.sell_size * previous_price_information['close']
                 self.comission_fee_history.append(commission_fee_amount)
-                self.sell_money_memory.append(cash)
-                self.needed_money_memory.append(0)
+                self.long_sell_money_memory.append(cash)
+                self.long_needed_money_memory.append(0)
                 self.long_position = 0
                 if self.sell_size > 0:  # 只有实际发生交易时才记录
                     trade_record = {
@@ -459,8 +474,8 @@ class Testing_Env(gym.Env):
                 cash_in = close_size * previous_price_information['close'] * (1 - self.comission_fee)
                 commission_fee_amount = self.comission_fee * close_size * previous_price_information['close']
                 self.comission_fee_history.append(commission_fee_amount)
-                self.sell_money_memory.append(cash_in)
-                self.needed_money_memory.append(0)
+                self.short_sell_money_memory.append(cash_in)
+                self.short_needed_money_memory.append(0)
                 self.short_position = 0
                 
                 if close_size > 0:  # 只有实际发生交易时才记录
@@ -507,12 +522,26 @@ class Testing_Env(gym.Env):
                 - commission_fee: 累计交易手续费
         """
         # 将卖出记录和买入记录转换为numpy数组
-        sell_money_memory = np.array(self.sell_money_memory)
-        needed_money_memory = np.array(self.needed_money_memory)
+        long_sell_money_memory = np.array(self.long_sell_money_memory)
+        long_needed_money_memory = np.array(self.long_needed_money_memory)   
         # 计算每笔交易的真实收益（卖出收入 - 买入支出）
-        true_money = sell_money_memory - needed_money_memory
+        long_true_money = long_sell_money_memory - long_needed_money_memory
+        for i in range(len(long_true_money)):
+            if long_true_money[i] < 0:
+                pass
+        short_sell_money_memory = np.array(self.short_sell_money_memory)
+        short_needed_money_memory = np.array(self.short_needed_money_memory)   
+        # 计算每笔交易的真实收益（卖出收入 - 买入支出）
+        short_true_money =  +short_sell_money_memory -short_needed_money_memory 
+        for i in range(len(short_true_money)):
+            if short_true_money[i] < 0:
+                pass
         # 计算总净收益
-        final_balance = np.sum(true_money)
+        
+        final_balance = np.sum(long_true_money) + (-np.sum(short_true_money))
+        
+        true_money = np.concatenate((long_true_money, short_true_money))
+        
         balance_list = []
         # 创建资金曲线（余额变化序列），用于分析资金波动情况
         for i in range(len(true_money)):

@@ -48,18 +48,18 @@ parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 /
 parser.add_argument("--update_times",type=int,default=20)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=2.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=5.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
-parser.add_argument("--epoch_number",type=int,default=20)  # 训练轮次数 / Training epochs
-parser.add_argument("--label",type=str,default="label_3")  # 标签列名称 / Label column name
-parser.add_argument("--clf",type=str,default="vol")  # 分类器类型 / Classifier type
-parser.add_argument("--alpha",type=float,default=4)  # KL损失权重系数 / KL loss weight coefficient
-parser.add_argument("--exp",type=str,default="exp_default_1")
+parser.add_argument("--epoch_number",type=int,default=15)  # 训练轮次数 / Training epochs
+parser.add_argument("--label",type=str,default="label_1")  # 标签列名称 / Label column name
+parser.add_argument("--clf",type=str,default="slope")  # 分类器类型 / Classifier type
+parser.add_argument("--alpha",type=float,default=2)  # KL损失权重系数 / KL loss weight coefficient
+parser.add_argument("--exp",type=str,default="both_action_5_2")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
-parser.add_argument("--action_mode",type=str,default="long")  # 动作方向
-parser.add_argument("--action_size",type=int,default=1)  # 动作数量
+parser.add_argument("--action_mode",type=str,default="both")  # 动作方向
+parser.add_argument("--action_size",type=int,default=2)  # 动作数量
 parser.add_argument("--reward_no_action",type=bool,default=False)  # 奖励没有动作
         
 def seed_torch(seed):
@@ -123,7 +123,7 @@ if __name__ == "__main__":
         val_index = pickle.load(file)
     var_df_list = val_index[label]
     
-    result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), args.label)
+    result_path = os.path.join("./result/low_level", '{}'.format(args.dataset), args.exp, '{}'.format(args.clf), args.label,"{}".format(args.alpha),"seed_6234571")
     epoch_path = os.path.join(result_path)
     val_path = os.path.join(epoch_path, "val")
     if not os.path.exists(val_path):
@@ -131,12 +131,16 @@ if __name__ == "__main__":
     action_mode = args.action_mode
     action_size =args.action_size
     actions, n_action, action_type_desc = get_actions(action_mode, action_size)
-    dqn_eval = DQN_EVAL(n_state_1,n_state_2,actions ,action_mode,n_action,args.device,
-                        val_data_path,
-                        tech_indicator_list,
-                        tech_indicator_list_trend,
-                        transcation_cost,
-                        back_time_length,
-                        max_holding_number)
-    return_rate = dqn_eval.val_cluster(epoch_path, val_path, 0, var_df_list)
-    log.info("Return rate: {}".format(return_rate))
+    for i in range(args.epoch_number):
+        epoch = i + 1
+        log.info(f"epoch: {epoch}")
+        epoch_path = os.path.join(result_path, f"epoch_{epoch}")
+        dqn_eval = DQN_EVAL(n_state_1,n_state_2,actions ,action_mode,n_action,args.device,
+                            val_data_path,
+                            tech_indicator_list,
+                            tech_indicator_list_trend,
+                            transcation_cost,
+                            back_time_length,
+                            max_holding_number)
+        return_rate = dqn_eval.val_cluster(epoch_path, val_path, 0, var_df_list)
+        log.info("Return rate: {}".format(return_rate))

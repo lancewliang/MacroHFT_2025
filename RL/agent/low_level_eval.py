@@ -146,7 +146,7 @@ class EVALER(object):
             single_state, trend_state, info = next_single_state, next_trend_state, next_info
             action_list_episode.append(action)
             # 获取账户信息（静默模式） / Get account information (silent mode)
-            portfit_magine, final_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
+        portfit_magine, final_balance, required_money, commission_fee = val_env.get_final_return_rate(slient=True)
         # 获取最终账户信息 / Get final account information
         final_balance = val_env.final_balance
         required_money = val_env.required_money 
