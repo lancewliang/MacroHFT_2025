@@ -372,7 +372,11 @@ class Testing_Env(gym.Env):
             #     # 惩罚下一天可能的收益 9-10 跌1 奖励+1    11-10 涨1  惩罚-1
             #     long_reward = cash - previous_long_value  - ((current_price_information['close']-previous_price_information['close'])*self.previous_short_position)
             # else:
-            long_reward = (current_long_value + cash) - previous_long_value
+            if self.action_mode == 'both' and previous_long_position > long_position and not (self.short_position == 0 and self.previous_short_position ==0):
+                # 多转空                
+                long_reward=-self.comission_fee * self.sell_size * previous_price_information['close']     
+            else:
+                long_reward = (current_long_value + cash) - previous_long_value
             self.current_money = self.current_money + cash 
             self.current_value = self.current_money + self.calculate_value(previous_price_information, self.long_position)    
                 
@@ -447,7 +451,11 @@ class Testing_Env(gym.Env):
             #     short_reward =  previous_short_value - (cash_value+commission_fee_amount) + ((previous_price_information['close']-current_price_information['close'])*self.previous_short_position)
             # else:
                 # 收益 = 上一刻仓位价值 - 现金流入 - 费用 - 下一刻仓位价值 
-            short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
+            if self.action_mode == 'both' and previous_short_position > short_position and not (self.long_position == 0 and self.previous_long_position ==0):
+                # 空转多             
+                short_reward=-self.comission_fee * close_size * previous_price_information['close']
+            else:
+                short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
                 
             self.current_money = self.current_money + cash_in
             self.current_value = self.current_money + self.calculate_value(previous_price_information, short_position)  

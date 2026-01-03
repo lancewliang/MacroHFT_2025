@@ -67,7 +67,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=1100000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=1500000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=8192)  # 批次大小 / Mini-batch size
@@ -295,7 +295,7 @@ class DQN(object):
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
         episodicmemory_dim = 64*4
-        self.memory = episodicmemory(4320, 5, self.n_state_1, self.n_state_2, episodicmemory_dim, self.device)
+        self.memory = episodicmemory(4320, 10, self.n_state_1, self.n_state_2, episodicmemory_dim, self.device)
         self.no_risk_return = args.no_risk_return
         self.best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record 
         self.validation_queue = queue.Queue(maxsize=10)  # 验证任务队列，限制大小避免内存溢出
