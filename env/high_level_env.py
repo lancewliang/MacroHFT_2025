@@ -146,8 +146,11 @@ class Testing_Env(gym.Env):
         self.previous_action = 0
         self.comission_fee = transcation_cost
 
-        self.needed_money_memory = []
-        self.sell_money_memory = []
+        self.long_needed_money_memory = []
+        self.long_sell_money_memory = []
+        
+        self.short_needed_money_memory = []  # 清空买入资金记录
+        self.short_sell_money_memory = []  # 清空卖出资金记录
         self.comission_fee_history = []        
         self.step_times = 0
         # 添加交易记录成员变量
@@ -209,8 +212,10 @@ class Testing_Env(gym.Env):
         price_information = self.data.iloc[-1]
         # 重置交易状态
 
-        self.needed_money_memory = []  # 清空买入资金记录
-        self.sell_money_memory = []  # 清空卖出资金记录
+        self.long_needed_money_memory = []  # 清空买入资金记录
+        self.long_sell_money_memory = []  # 清空卖出资金记录
+        self.short_needed_money_memory = []  # 清空买入资金记录
+        self.short_sell_money_memory = []  # 清空卖出资金记录
         self.comission_fee_history = []  # 清空手续费记录
         self.step_times = 0
         # 重置交易记录
@@ -298,8 +303,8 @@ class Testing_Env(gym.Env):
             commission_fee_amount = self.comission_fee * self.buy_size * previous_price_information['close']
             self.comission_fee_history.append(commission_fee_amount) # 记录交易成本
             # 更新资金记录
-            self.needed_money_memory.append(needed_cash)  # 买入支出
-            self.sell_money_memory.append(0) # 卖出收入
+            self.long_needed_money_memory.append(needed_cash)  # 买入支出
+            self.long_sell_money_memory.append(0) # 卖出收入
 
             self.long_position = long_position
             # 计算持仓价值变化
@@ -327,13 +332,11 @@ class Testing_Env(gym.Env):
                 self.trade_id_counter += 1
             self.current_money = self.current_money - needed_cash
             self.current_value = self.current_money + self.calculate_value(previous_price_information, long_position)
-        elif long_position == 0 and self.previous_long_position ==0 and (self.action_mode == "both" or self.action_mode == "long"):
+        elif long_position == 0 and self.previous_long_position ==0:
             #什么都不干，并且没有仓位， 就需要惩罚下一天可能的收益
-            if self.reward_no_action:
-                long_reward = ((current_price_information['close']-previous_price_information['close'])*self.max_holding_number)*-1 
-            else:
-                long_reward=0
-        elif long_position == 0 and self.previous_long_position ==0 and (self.action_mode == "both" or self.action_mode == "short"):
+            # if self.reward_no_action:
+            #     long_reward = ((current_price_information['close']-previous_price_information['close'])*self.max_holding_number)*-1 
+            # else:
             long_reward=0
         # 处理卖出操作
         else:
@@ -344,8 +347,8 @@ class Testing_Env(gym.Env):
             commission_fee_amount = self.comission_fee * self.sell_size * previous_price_information['close']
             self.comission_fee_history.append(commission_fee_amount) # 记录交易成本
             # 更新资金记录
-            self.sell_money_memory.append(cash) # 卖出收入
-            self.needed_money_memory.append(0) # 买入支出
+            self.long_sell_money_memory.append(cash) # 卖出收入
+            self.long_needed_money_memory.append(0) # 买入支出
             self.long_position = long_position
             # 记录交易信息
             if self.sell_size > 0:  # 只有实际发生交易时才记录
@@ -381,8 +384,8 @@ class Testing_Env(gym.Env):
             cash_out = cash_value * (1 + self.comission_fee)
             commission_fee_amount = self.comission_fee * open_size * previous_price_information['close']
             self.comission_fee_history.append(commission_fee_amount)
-            self.sell_money_memory.append(0)
-            self.needed_money_memory.append(cash_out)
+            self.short_sell_money_memory.append(0)
+            self.short_needed_money_memory.append(cash_out)
             # 记录交易信息
             if open_size > 0:  # 只有实际发生交易时才记录
                 trade_record = {
@@ -406,12 +409,7 @@ class Testing_Env(gym.Env):
             self.current_money = self.current_money - cash_out
             self.current_value = self.current_money + self.calculate_value(previous_price_information, short_position)            
         
-        elif self.short_position == 0 and self.previous_short_position ==0 and (self.action_mode == "both" or self.action_mode == "short"):
-            if self.reward_no_action:
-                short_reward =  ((previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-1 
-            else:
-                short_reward=0
-        elif self.short_position == 0 and self.previous_short_position ==0 and (self.action_mode == "long"):
+        elif self.short_position == 0 and self.previous_short_position ==0:
             short_reward=0
         else:
             # elif previous_short_position >= short_position:
@@ -422,8 +420,8 @@ class Testing_Env(gym.Env):
             cash_in = cash_value * (1 - self.comission_fee)
             commission_fee_amount = self.comission_fee * close_size * previous_price_information['close']
             self.comission_fee_history.append(commission_fee_amount)
-            self.sell_money_memory.append(cash_in)
-            self.needed_money_memory.append(0)   
+            self.short_sell_money_memory.append(cash_in)
+            self.short_needed_money_memory.append(0)   
             # 记录交易信息
             if close_size > 0:  # 只有实际发生交易时才记录
                 trade_record = {
@@ -456,12 +454,9 @@ class Testing_Env(gym.Env):
 
             
         # 更新持仓记录
-        if long_position == 0 and self.previous_long_position ==0 and long_position == 0 and self.previous_long_position ==0 and self.action_mode == "both":
+        if long_position == 0 and self.previous_long_position ==0 and short_position == 0 and self.previous_short_position ==0 :
             # self.reward = (abs(previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-0.5/scale_factor
-            if self.reward_no_action :
-                self.reward = -3 
-            else:
-                self.reward = 0
+            self.reward = 0
         else:   
             # 计算总收益
             self.reward = (long_reward + short_reward)/scale_factor
@@ -480,8 +475,8 @@ class Testing_Env(gym.Env):
                 cash = self.sell_size * previous_price_information['close'] * (1 - self.comission_fee)
                 commission_fee_amount = self.comission_fee * self.sell_size * previous_price_information['close']
                 self.comission_fee_history.append(commission_fee_amount)
-                self.sell_money_memory.append(cash)
-                self.needed_money_memory.append(0)
+                self.long_sell_money_memory.append(cash)
+                self.long_needed_money_memory.append(0)
                 self.long_position = 0
                 if self.sell_size > 0:  # 只有实际发生交易时才记录
                     trade_record = {
@@ -503,8 +498,8 @@ class Testing_Env(gym.Env):
                 cash_in = close_size * previous_price_information['close'] * (1 - self.comission_fee)
                 commission_fee_amount = self.comission_fee * close_size * previous_price_information['close']
                 self.comission_fee_history.append(commission_fee_amount)
-                self.sell_money_memory.append(cash_in)
-                self.needed_money_memory.append(0)
+                self.short_sell_money_memory.append(cash_in)
+                self.short_needed_money_memory.append(0)
                 self.short_position = 0
                 
                 if close_size > 0:  # 只有实际发生交易时才记录
@@ -538,7 +533,7 @@ class Testing_Env(gym.Env):
         # 返回观测值和环境状态
         return self.single_state, self.trend_state, self.clf_state.reshape(-1), self.reward, self.terminal, {
             "previous_action": action,
-            "previous_price_information": current_price_information,
+            "previous_price_information": previous_price_information,
         }
     
     def get_final_return_rate(self, slient=False):
@@ -556,12 +551,25 @@ class Testing_Env(gym.Env):
                 - commission_fee: 累计交易手续费
         """
         # 将卖出记录和买入记录转换为numpy数组
-        sell_money_memory = np.array(self.sell_money_memory)
-        needed_money_memory = np.array(self.needed_money_memory)
+        long_sell_money_memory = np.array(self.long_sell_money_memory)
+        long_needed_money_memory = np.array(self.long_needed_money_memory)   
         # 计算每笔交易的真实收益（卖出收入 - 买入支出）
-        true_money = sell_money_memory - needed_money_memory
+        long_true_money = long_sell_money_memory - long_needed_money_memory
+         
+        short_sell_money_memory = np.array(self.short_sell_money_memory)
+        short_needed_money_memory = np.array(self.short_needed_money_memory)   
+        # 计算每笔交易的真实收益（卖出收入 - 买入支出）
+        short_true_money =  +short_sell_money_memory -short_needed_money_memory 
+ 
+        # 计算总净收益
+        
+        final_balance = np.sum(long_true_money) + (-np.sum(short_true_money))
+        
+        true_money = np.concatenate((long_true_money, short_true_money))
+        
         non_zero_mask = true_money != 0
         true_money = true_money[non_zero_mask]
+        
         # 计算总净收益
         final_balance = np.sum(true_money)
         balance_list = []
@@ -570,6 +578,7 @@ class Testing_Env(gym.Env):
         #     # 累计计算每个时间点的余额
         #     balance_list.append(np.sum(true_money[:i + 1]))
         balance_list = np.cumsum(true_money)
+        
         # 计算最大资金需求（历史最低余额的绝对值） （风险度量指标） 
         required_money = 0
         if len(balance_list) > 0:

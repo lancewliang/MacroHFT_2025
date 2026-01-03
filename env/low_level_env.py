@@ -311,6 +311,7 @@ class Testing_Env(gym.Env):
             #什么都不干，并且没有仓位， 就需要惩罚下一天可能的收益             
             long_reward=0 
         # 处理卖出操作
+   
         else:
             # previous_long_position >= long_position:
             self.sell_size = previous_long_position - long_position
@@ -346,7 +347,12 @@ class Testing_Env(gym.Env):
             #     else:
             #         long_reward = (current_long_value + cash) - previous_long_value
             # else:
-            long_reward = (current_long_value + cash) - previous_long_value
+            if self.action_mode == 'both' and previous_long_position > long_position and not (self.short_position == 0 and self.previous_short_position ==0):
+                # 多转空                
+                long_reward=-self.comission_fee * self.sell_size * previous_price_information['close']        
+            else:
+                #多方持有或者多方平仓
+                long_reward = (current_long_value + cash) - previous_long_value
                                     
             # # 卖出奖励计算：当前价值 + 现金流入 - 上一时刻价值
             # self.reward = current_long_value + cash - previous_long_value
@@ -396,6 +402,7 @@ class Testing_Env(gym.Env):
         
         elif self.short_position == 0 and self.previous_short_position ==0 : 
             short_reward=0 
+        
         else:
             # elif previous_short_position >= short_position:
             # 空头减仓（平仓）
@@ -431,10 +438,14 @@ class Testing_Env(gym.Env):
             #    short_reward =  previous_short_value - (cash_value+commission_fee_amount) + ((previous_price_information['close']-current_price_information['close'])*self.previous_short_position)
             #else:
                 # 收益 = 上一刻仓位价值 - 现金流入 - 费用 - 下一刻仓位价值 
-            short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
+            if self.action_mode == 'both' and previous_short_position > short_position and not (self.long_position == 0 and self.previous_long_position ==0):
+                # 空转多             
+                short_reward=-self.comission_fee * close_size * previous_price_information['close']
+            else:
+                short_reward =  previous_short_value - (cash_value+commission_fee_amount) - current_short_value 
 
         
-        if long_position == 0 and self.previous_long_position ==0 and long_position == 0 and self.previous_long_position ==0 and self.action_mode == "both":
+        if long_position == 0 and self.previous_long_position ==0 and short_position == 0 and self.previous_short_position ==0:
             # self.reward = (abs(previous_price_information['close']-current_price_information['close'])*self.max_holding_number)*-0.5/scale_factor
             self.reward = 0
         else:   
@@ -526,29 +537,27 @@ class Testing_Env(gym.Env):
         long_needed_money_memory = np.array(self.long_needed_money_memory)   
         # 计算每笔交易的真实收益（卖出收入 - 买入支出）
         long_true_money = long_sell_money_memory - long_needed_money_memory
-        for i in range(len(long_true_money)):
-            if long_true_money[i] < 0:
-                pass
+         
         short_sell_money_memory = np.array(self.short_sell_money_memory)
         short_needed_money_memory = np.array(self.short_needed_money_memory)   
         # 计算每笔交易的真实收益（卖出收入 - 买入支出）
         short_true_money =  +short_sell_money_memory -short_needed_money_memory 
-        for i in range(len(short_true_money)):
-            if short_true_money[i] < 0:
-                pass
+ 
         # 计算总净收益
         
         final_balance = np.sum(long_true_money) + (-np.sum(short_true_money))
         
         true_money = np.concatenate((long_true_money, short_true_money))
-        
-        balance_list = []
+        balance_list = np.cumsum(true_money)
+        # balance_list = []
         # 创建资金曲线（余额变化序列），用于分析资金波动情况
-        for i in range(len(true_money)):
-            # 累计计算每个时间点的余额
-            balance_list.append(np.sum(true_money[:i + 1]))
-        # 计算最大资金需求（历史最低余额的绝对值） （风险度量指标） 
-        required_money = -np.min(balance_list)
+        # for i in range(len(true_money)):
+        #     # 累计计算每个时间点的余额
+        #     balance_list.append(np.sum(true_money[:i + 1]))
+        # 计算最大资金需求（历史最低余额的绝对值） （风险度量指标）
+        required_money = 0
+        if len(balance_list) > 0: 
+            required_money = -np.min(balance_list)
         # 计算总手续费（注意：字段名存在拼写错误 comission -> commission）
         commission_fee = np.sum(self.comission_fee_history)
         # 返回相对收益率、净收益、最大资金需求、总手续费

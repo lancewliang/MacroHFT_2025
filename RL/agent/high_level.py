@@ -79,19 +79,19 @@ parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 /
 parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
-parser.add_argument("--transcation_cost",type=float,default=2.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
+parser.add_argument("--transcation_cost",type=float,default=5.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
 parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长度 / Historical window length
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=10)  # 训练轮次数 / Training epochs
-parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
+parser.add_argument("--alpha",type=float,default=0.05)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--no_risk_return",type=float,default=4.5) #无风险返回率
-parser.add_argument("--exp",type=str,default="exp4_4")
+parser.add_argument("--exp",type=str,default="both_action")
 parser.add_argument("--num_step",type=int,default=10)
-parser.add_argument("--action_mode",type=str,default="long")  # 动作方向
-parser.add_argument("--action_size",type=int,default=1)  # 动作数量
+parser.add_argument("--action_mode",type=str,default="both")  # 动作方向
+parser.add_argument("--action_size",type=int,default=2)  # 动作数量
 parser.add_argument("--reward_no_action",type=bool,default=False)  # 奖励没有动作
 
 def seed_torch(seed):

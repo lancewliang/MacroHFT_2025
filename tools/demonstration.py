@@ -107,6 +107,9 @@ def make_q_table_reward(df: pd.DataFrame,
                     #     long_reward = (future_price_information['close']-current_price_information['close'])*max_holding*-1 
                     # else:                        
                     long_reward = 0
+                elif action_mode == 'both' and previous_long_action > current_long_action:
+                    long_position_change = (previous_long_action - current_long_action) / scale_factor * max_holding                    
+                    long_reward = long_position_change * current_price_information['close'] * ( -commission_fee) 
                 else:
                     # 多头卖出操作计算
                     previous_long_position = previous_long_action / scale_factor * max_holding
@@ -141,9 +144,11 @@ def make_q_table_reward(df: pd.DataFrame,
                     # 0 +9.8 -10*1 ping = -0.2
                     # 0 +9.8 -11*1 zhang = -1.2
                     # 0 +9.8 -9*1 die = 0.8
-                elif current_short_action ==0 and previous_short_action ==0 :
-                         
+                elif current_short_action ==0 and previous_short_action ==0 :                         
                     short_reward = 0
+                elif action_mode == 'both' and previous_short_action > current_short_action:
+                    short_position_change = (previous_short_action - current_short_action) / scale_factor * max_holding
+                    short_reward=short_position_change * current_price_information['close'] * (-commission_fee) 
                 else:
                     # 空头平仓操作计算（相当于买入）
                     previous_short_position = previous_short_action / scale_factor * max_holding
@@ -182,5 +187,5 @@ def make_q_table_reward(df: pd.DataFrame,
                 total_reward = reward_scale * total_reward
                 _q_value = total_reward + gamma * np.max(q_table[len(df) - t + 1][current_action_index][:])
                 q_table[len(df) - t][previous_action_index][current_action_index] = _q_value
-                #log.debug(f"t={t}, previous_action_index={previous_action_index}, current_action_index={current_action_index}, total_reward={total_reward}, _q_value={_q_value}")
+                log.debug(f"t={t},current_price_information['close']={current_price_information['close']}, future_price_information['close']={future_price_information['close']}, previous_action_index={previous_action_index}, current_action_index={current_action_index}, long_reward={long_reward},short_reward={short_reward}, total_reward={total_reward}, _q_value={_q_value}")
     return q_table
