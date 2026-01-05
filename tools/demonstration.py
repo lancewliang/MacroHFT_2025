@@ -138,6 +138,7 @@ def make_q_table_reward(df: pd.DataFrame,
                     current_short_position = current_short_action / scale_factor * max_holding
                     short_position_change = (current_short_action - previous_short_action) / scale_factor * max_holding
                     short_open_money = short_position_change * current_price_information['close'] * (1 - commission_fee)  # 开仓收钱
+                    commission_fee_momery = short_position_change * current_price_information['close'] * commission_fee
                     current_short_value = calculate_value(current_price_information, previous_short_position)
                     future_short_value = calculate_value(future_price_information, current_short_position)
                     # short_reward = future_short_value + short_open_money - current_short_value
@@ -154,6 +155,7 @@ def make_q_table_reward(df: pd.DataFrame,
                     current_short_position = current_short_action / scale_factor * max_holding
                     short_position_change = (previous_short_action - current_short_action) / scale_factor * max_holding
                     short_close_money = short_position_change * current_price_information['close'] * (1 + commission_fee)  # 平仓付钱
+                    commission_fee_momery = short_position_change * current_price_information['close'] * commission_fee
                     current_short_value = calculate_value(current_price_information, previous_short_position)
                     future_short_value = calculate_value(future_price_information, current_short_position)
                     # if current_short_position == 0 :

@@ -541,11 +541,11 @@ class Testing_Env(gym.Env):
         short_sell_money_memory = np.array(self.short_sell_money_memory)
         short_needed_money_memory = np.array(self.short_needed_money_memory)   
         # 计算每笔交易的真实收益（卖出收入 - 买入支出）
-        short_true_money =  +short_sell_money_memory -short_needed_money_memory 
+        short_true_money =  short_needed_money_memory -short_sell_money_memory
  
         # 计算总净收益
         
-        final_balance = np.sum(long_true_money) + (-np.sum(short_true_money))
+        final_balance = np.sum(long_true_money) + (np.sum(short_true_money))
         
         true_money = np.concatenate((long_true_money, short_true_money))
         balance_list = np.cumsum(true_money)

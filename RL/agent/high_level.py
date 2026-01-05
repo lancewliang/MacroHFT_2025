@@ -67,7 +67,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=1500000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=1000000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=10)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=8192)  # 批次大小 / Mini-batch size
@@ -76,7 +76,7 @@ parser.add_argument("--lr", type=float, default=1e-4)  # 学习率 / Learning ra
 parser.add_argument("--epsilon_start",type=float,default=0.7)  # 初始探索率 / Initial exploration rate
 parser.add_argument("--epsilon_end",type=float,default=0.3)  # 最小探索率 / Minimum exploration rate
 parser.add_argument("--decay_length",type=int,default=5)  # 探索衰减周期 / Exploration decay length
-parser.add_argument("--update_times",type=int,default=10)  # 单步更新次数 / Update times per step
+parser.add_argument("--update_times",type=int,default=20)  # 单步更新次数 / Update times per step
 parser.add_argument("--gamma", type=float, default=0.99)  # 折扣因子 / Discount factor
 parser.add_argument("--tau", type=float, default=0.005)  # 软更新系数 / Soft update coefficient
 parser.add_argument("--transcation_cost",type=float,default=5.0 / 10000)  # 交易成本（注意拼写） / Transaction cost (typo preserved)
@@ -84,14 +84,14 @@ parser.add_argument("--back_time_length",type=int,default=1)  # 历史窗口长�
 parser.add_argument("--seed",type=int,default=12345)  # 随机种子 / Random seed
 parser.add_argument("--n_step",type=int,default=1)  # n-step TD目标 / N-step TD target
 parser.add_argument("--epoch_number",type=int,default=10)  # 训练轮次数 / Training epochs
-parser.add_argument("--alpha",type=float,default=0.01)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
+parser.add_argument("--alpha",type=float,default=0.5)  # KL损失权重系数 / KL loss weight coefficient #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device cuda:0
 parser.add_argument("--beta",type=int,default=5) #alpha 代表了记忆的经验权重， beta代表先验q-table权重
 parser.add_argument("--no_risk_return",type=float,default=4.5) #无风险返回率
-parser.add_argument("--exp",type=str,default="both_action")
+parser.add_argument("--exp",type=str,default="short_action_3")
 parser.add_argument("--num_step",type=int,default=10)
-parser.add_argument("--action_mode",type=str,default="both")  # 动作方向
-parser.add_argument("--action_size",type=int,default=2)  # 动作数量
+parser.add_argument("--action_mode",type=str,default="short")  # 动作方向
+parser.add_argument("--action_size",type=int,default=1)  # 动作数量
 parser.add_argument("--reward_no_action",type=bool,default=False)  # 奖励没有动作
 
 def seed_torch(seed):
@@ -739,7 +739,8 @@ class DQN(object):
         best_return_rate = -float('inf')
         best_model = None
         self._start_validation_consumer()
-        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") ) 
+        self.df = pd.read_feather(os.path.join(self.train_data_path, "train.feather") )
+        #.head(10000)
         log.info(f"train data length: {len(self.df)}")
         # 初始化经验回放缓冲区
         # Initialize replay buffer for experience storage
@@ -1024,7 +1025,7 @@ class HIGH_LEVEL_DQN_TEST(DQN):
         final_balance_list = []
         required_money_list = []
         commission_fee_list = []
-        self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather")) 
+        self.df = pd.read_feather(os.path.join(self.test_data_path, "test.feather"))  
         log.info(self.df.head(10))
         log.info(self.df.tail(10))
         log.info(len(self.df))
@@ -1052,11 +1053,11 @@ class HIGH_LEVEL_DQN_TEST(DQN):
             s, s2, s3, info = s_, s2_, s3_, info_
             action_list_episode.append(a)
             step_times += 1
-            if step_times%100000==0:
+            if step_times%10000==0:
                 log.info(f"step_times:{step_times},a:{a},r:{r}")
         return_margin, final_balance, required_money, commission_fee = test_env.get_final_return_rate(slient=True)    
         metrics = calculate_trading_metrics(self.df,test_env.trade_records, test_env.value_history, self.no_risk_return) 
-      
+    
         total_amount= metrics['total_amount'] #总交易金额
         annualized_volatility = metrics['annualized_volatility'] #年化波动率
         win_rate = metrics['win_rate'] #胜率
@@ -1135,8 +1136,8 @@ if __name__ == "__main__":
     config_log(logs_dir,pfx=pfx)
     agent = DQN(args)
     agent.train() 
-    
-    num_processes = 4
+ 
+    num_processes = 3
     args_list = [
             
     ]

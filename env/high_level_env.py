@@ -470,7 +470,7 @@ class Testing_Env(gym.Env):
             self.reward = (long_reward + short_reward)/scale_factor
         self.reward_history.append(self.reward)
         #return_margin, pure_balance, required_money, commission_fee = self.get_final_return_rate()
-        #log.debug(f"m:{self.m}, price: {current_price_information['close']}, action: {action}, self.current_money: {self.current_money:.2f}, self.current_value: {self.current_value:.2f}, reward: {self.reward}, return_margin: {return_margin:.2f}, pure_balance: {pure_balance:.2f}, required_money: {required_money:.2f}, commission_fee: {commission_fee:.2f}")
+        # log.info(f"m:{self.m}, pre_price:{previous_price_information['close']} current_price: {current_price_information['close']}, action: {action}, self.current_money: {self.current_money:.2f}, self.current_value: {self.current_value:.2f}, reward: {self.reward}")
         # 更新持仓记录
         self.previous_long_position = self.long_position
         self.previous_short_position = self.short_position   
@@ -567,11 +567,11 @@ class Testing_Env(gym.Env):
         short_sell_money_memory = np.array(self.short_sell_money_memory)
         short_needed_money_memory = np.array(self.short_needed_money_memory)   
         # 计算每笔交易的真实收益（卖出收入 - 买入支出）
-        short_true_money =  +short_sell_money_memory -short_needed_money_memory 
+        short_true_money =  short_needed_money_memory - short_sell_money_memory
  
         # 计算总净收益
         
-        final_balance = np.sum(long_true_money) + (-np.sum(short_true_money))
+        final_balance = np.sum(long_true_money) + (np.sum(short_true_money))
         
         true_money = np.concatenate((long_true_money, short_true_money))
         
@@ -579,7 +579,7 @@ class Testing_Env(gym.Env):
         true_money = true_money[non_zero_mask]
         
         # 计算总净收益
-        final_balance = np.sum(true_money)
+        # final_balance = np.sum(true_money)
         balance_list = []
         # 创建资金曲线（余额变化序列），用于分析资金波动情况
         # for i in range(len(true_money)):
