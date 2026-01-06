@@ -20,21 +20,23 @@ Update: We now provide trained model checkpoints for sub-agents, which can be di
 Run scripts/high_level.sh for meta-policy optimization. 
 
 
-
+## lance  78599194@qq.com
 After 4 months of unremitting efforts, mainly due to the lack of computing power equipment, I finally successfully reproduced the test results of low-level and high-level in your paper. Thank you for releasing all the code, algorithms, and data. Sincere tribute.
 I will continue to try to improve some parts of this framework, including:
---More actions, more position levels  （已经测试过了， 不太可能成功，由于先验经验一定是满仓最大优势，导致学习不到半仓的好处，除非更换奖励函数为夏普之类的长期奖励，暂时不作研究）
-  -- 0,1,2这种情况效果不好
-  -- -1,0,1这种情况也不好， 因为0不是最优解
---Due to the low trading frequency in my testing results, （在没有持仓的时候增加了惩罚，交易频率上升了）
---I tend to remove order data from the micro market for testing purposes
---Use LSTM or Transformer to observe the effect at the model level 
---Attempt to investigate the impact of ranbowdqn on the model
---Incorporate spot prices into the factor,
---Short selling strategy, one-way short selling or as protection for long positions （可行）
---Test buying spot goods （放弃，由于现货交易的手续费较高0.3%，而我在测试中只关注了期货交易的收益，所以放弃了测试现货交易的效果，之后会考虑）
-
-# 当前进度
-- 训练highlevel使用作者原lowlevel提供的bestmodel 完成， 测试集结果36%回报
-- 单独训练lowlevel 完成，测试回报5%左右
-- 复现 lowlevel+highlevel训练中
+- More actions, more position levels  
+```
+# 汇总：
+- 条件：5倍杠杆， 万5费率， ETH， 7个月训练 2个验证， 3个月测试
+- 做单方向多头   20-35%之间， 交易频率低。 原作者收益率在40%左右。
+- 做单方向空头   70-100%之间， 交易频率高 
+- 做双方向空头和多头   35-45%之间， 交易频率中
+# 似乎加密货币空头策略更为有效。可能和训练数据集有关系。不能下定论。双方向策略会综合多头和空头的收益率，显然多头拖累了收益率
+20260106
+```
+- I tend to remove order data from the micro market for testing purposes
+- More sub-agents pre volume
+- Use LSTM or Transformer to observe the effect at the model level 
+- Attempt to investigate the impact of ranbowdqn on the model
+- Incorporate spot prices into the factor,
+- Short selling strategy, one-way short selling or as protection for long positions （可行）
+- Test buying spot goods （放弃，由于现货交易的手续费较高0.3%，而我在测试中只关注了期货交易的收益，所以放弃了测试现货交易的效果，之后会考虑）
