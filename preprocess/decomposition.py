@@ -26,11 +26,11 @@ def get_slope(smoothed_data):
     X = np.arange(len(smoothed_data)).reshape(-1, 1)
     model = LinearRegression().fit(X, smoothed_data)
     return model.coef_[0]
-
+N, Wn = 1, 0.05
+bb, aa = butter(N, Wn, btype='low')
 def get_slope_window(window):
-    N, Wn = 1, 0.05
-    b, a = butter(N, Wn, btype='low')
-    y = filtfilt(b, a, window.values)
+
+    y = filtfilt(bb, aa, window.values)
     X = np.arange(len(y)).reshape(-1, 1)   
     model = LinearRegression().fit(X, y)
     return model.coef_[0]
