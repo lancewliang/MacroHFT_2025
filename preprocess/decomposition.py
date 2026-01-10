@@ -2,17 +2,25 @@ import numpy as np
 import pandas as pd
 import os
 import pickle
+import logging
 from scipy.signal import butter, filtfilt
 from sklearn.linear_model import LinearRegression
 
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 def smooth_data(data):
-    #使用低通巴特沃斯滤波器对时间序列数据进行平滑处理，去除高频噪声。
+    #使用低通巴特沃斯滤波器对时间序列数据进行平滑处理,去除高频噪声。
     N, Wn = 1, 0.05
     b, a = butter(N, Wn, btype='low')
     return filtfilt(b, a, data)
 
 def get_slope(smoothed_data):
-    #通过线性回归计算时间序列的趋势斜率，用于量化价格走势的方向和强度。
+    #通过线性回归计算时间序列的趋势斜率,用于量化价格走势的方向和强度。
     X = np.arange(len(smoothed_data)).reshape(-1, 1)
     model = LinearRegression().fit(X, smoothed_data)
     return model.coef_[0]
@@ -51,11 +59,11 @@ def label_slope(df_train, df_val, df_test):
     为训练集、验证集和测试集的时间序列数据添加趋势斜率标签
     
     参数:
-        df_train (pd.DataFrame): 训练集数据，包含'close'列
-        df_val (pd.DataFrame): 验证集数据，包含'close'列
-        df_test (pd.DataFrame): 测试集数据，包含'close'列
+        df_train (pd.DataFrame): 训练集数据,包含'close'列
+        df_val (pd.DataFrame): 验证集数据,包含'close'列
+        df_test (pd.DataFrame): 测试集数据,包含'close'列
     """
-    chunk_size = 4320  # 每个时间窗口的大小（单位：数据点）
+    chunk_size = 4320  # 每个时间窗口的大小(单位:数据点)
     
     # 存储各数据集的斜率值
     slopes_train, slopes_val, slopes_test = [], [], []
@@ -69,7 +77,7 @@ def label_slope(df_train, df_val, df_test):
         slope = get_slope(smoothed_chunk)    # 计算斜率
         slopes_train.append(slope)
 
-    # 分块计算验证集斜率（逻辑同上）
+    # 分块计算验证集斜率(逻辑同上)
     for i in range(0, int(len(df_val) / chunk_size)):
         start = i * chunk_size
         end = (i + 1) * chunk_size
@@ -78,7 +86,7 @@ def label_slope(df_train, df_val, df_test):
         slope = get_slope(smoothed_chunk)
         slopes_val.append(slope)
 
-    # 分块计算测试集斜率（逻辑同上）
+    # 分块计算测试集斜率(逻辑同上)
     for i in range(0, int(len(df_test) / chunk_size)):
         start = i * chunk_size
         end = (i + 1) * chunk_size
@@ -87,7 +95,7 @@ def label_slope(df_train, df_val, df_test):
         slope = get_slope(smoothed_chunk)
         slopes_test.append(slope)
 
-    # 使用分位数将斜率分为5个类别（0-4）
+    # 使用分位数将斜率分为5个类别(0-4)
     quantiles = [0, 0.05, 0.35, 0.65, 0.95, 1]
     slope_labels_train, bins = pd.qcut(slopes_train, q=quantiles, retbins=True, labels=False)
 
@@ -111,7 +119,7 @@ def label_slope(df_train, df_val, df_test):
     slope_labels_val = [1 if element == 0 else element for element in slope_labels_val]
     slope_labels_val = [3 if element == 4 else element for element in slope_labels_val]
     
-    # 处理测试集标签并调整极端类别（逻辑同上）
+    # 处理测试集标签并调整极端类别(逻辑同上)
     slope_labels_test = pd.cut(slopes_test, bins=bins, labels=False, include_lowest=True)
     slope_labels_test = [1 if element == 0 else element for element in slope_labels_test]
     slope_labels_test = [3 if element == 4 else element for element in slope_labels_test]
@@ -140,7 +148,7 @@ def label_volatility(df_train, df_val, df_test):
     # 存储波动率值
     volatilities_train, volatilities_val, volatilities_test = [], [], []
     
-    # 分块计算波动率（与label_slope结构类似）
+    # 分块计算波动率(与label_slope结构类似)
     for i in range(0, int(len(df_train)/chunk_size)):
         start = i * chunk_size
         end = (i + 1) * chunk_size
@@ -149,7 +157,7 @@ def label_volatility(df_train, df_val, df_test):
         volatility = chunk['return'].std()  # 计算标准差作为波动率
         volatilities_train.append(volatility)
 
-    # 验证集处理（逻辑同上）
+    # 验证集处理(逻辑同上)
     for i in range(0, int(len(df_val)/chunk_size)):
         start = i * chunk_size
         end = (i + 1) * chunk_size
@@ -158,7 +166,7 @@ def label_volatility(df_train, df_val, df_test):
         volatility = chunk['return'].std()
         volatilities_val.append(volatility)
     
-    # 测试集处理（逻辑同上）
+    # 测试集处理(逻辑同上)
     for i in range(0, int(len(df_test)/chunk_size)):
         start = i * chunk_size
         end = (i + 1) * chunk_size
@@ -209,9 +217,9 @@ def label_volatility(df_train, df_val, df_test):
 def label_whole(df):
     """
     对整个数据集添加滚动窗口特征
-    为每个数据点生成基于滚动窗口的历史特征，增强模型对时序模式的感知能力。
+    为每个数据点生成基于滚动窗口的历史特征,增强模型对时序模式的感知能力。
     参数:
-        df (pd.DataFrame): 输入数据集，包含'close'列
+        df (pd.DataFrame): 输入数据集,包含'close'列
     返回:
         pd.DataFrame: 添加了slope和vol特征的新数据集
     """
@@ -234,10 +242,10 @@ if __name__ == "__main__":
     df_train = pd.read_feather('./data/ETHUSDT/df_train.feather')
     df_val = pd.read_feather('./data/ETHUSDT/df_val.feather')
     df_test = pd.read_feather('./data/ETHUSDT/df_test.feather')
-    print(f"data shape:{df_train.shape}")
-    print(df_train.columns)
-    print(df_train.head())
-    print(df_train.tail())
+    logger.info(f"data shape: {df_train.shape}")
+    logger.info(f"columns: {df_train.columns.tolist()}")
+    logger.info(f"head:\n{df_train.head()}")
+    logger.info(f"tail:\n{df_train.tail()}")
     os.makedirs('./data/ETHUSDT/train', exist_ok=True)
     os.makedirs('./data/ETHUSDT/val', exist_ok=True)
     os.makedirs('./data/ETHUSDT/test', exist_ok=True)
@@ -246,14 +254,18 @@ if __name__ == "__main__":
     chunk(df_train, df_val, df_test)
     label_slope(df_train, df_val, df_test)
     label_volatility(df_train, df_val, df_test)
-
+    logger.info(f"df_train")
     df_train = label_whole(df_train).dropna().reset_index(drop=True).iloc[1:].reset_index(drop=True)
+    
+    logger.info(f"df_val")
     df_val = label_whole(df_val).dropna().reset_index(drop=True).iloc[1:].reset_index(drop=True)
+    
+    logger.info(f"df_test")
     df_test = label_whole(df_test).dropna().reset_index(drop=True).iloc[1:].reset_index(drop=True)
 
+    logger.info(f"label end")
     df_train.to_feather('./data/ETHUSDT/whole/train.feather')
     df_val.to_feather('./data/ETHUSDT/whole/val.feather')
     df_test.to_feather('./data/ETHUSDT/whole/test.feather')
 
 
-    
