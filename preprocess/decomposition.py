@@ -5,6 +5,8 @@ import pickle
 import logging
 from scipy.signal import butter, filtfilt
 from sklearn.linear_model import LinearRegression
+from multiprocessing import Pool, cpu_count
+from functools import partial
 
 # 配置日志
 logging.basicConfig(
@@ -214,27 +216,49 @@ def label_volatility(df_train, df_val, df_test):
         pickle.dump(test_indices, file)
 
 
-def label_whole(df):
+def label_whole(df, dataset_name='dataset'):
     """
     对整个数据集添加滚动窗口特征
     为每个数据点生成基于滚动窗口的历史特征,增强模型对时序模式的感知能力。
     参数:
         df (pd.DataFrame): 输入数据集,包含'close'列
+        dataset_name (str): 数据集名称,用于日志输出
     返回:
         pd.DataFrame: 添加了slope和vol特征的新数据集
     """
-    window_size_list = [360]  # 窗口尺寸列表
-    
+    logger.info(f"开始处理 {dataset_name}, shape: {df.shape}")
+
+    window_size_list = [180,360]  # 窗口尺寸列表
+
+    # 先计算一次return,避免重复计算
+    df['return'] = df['close'].pct_change().fillna(0)
+
     for i in range(len(window_size_list)):
         window_size = window_size_list[i]
+        logger.info(f"{dataset_name}: 计算窗口大小 {window_size} 的特征...")
+
         # 添加滚动窗口斜率特征
         df['slope_{}'.format(window_size)] = df['close'].rolling(window=window_size).apply(get_slope_window)
-        # 计算收益率
-        df['return'] = df['close'].pct_change().fillna(0)
+
         # 添加滚动窗口波动率特征
         df['vol_{}'.format(window_size)] = df['return'].rolling(window=window_size).std()
-    
+
+    logger.info(f"{dataset_name} 处理完成")
     return df
+
+
+def process_single_dataset(args):
+    """
+    处理单个数据集的包装函数,用于多进程并行
+    参数:
+        args: (df, dataset_name) 元组
+    返回:
+        处理后的DataFrame
+    """
+    df, dataset_name = args
+    result = label_whole(df, dataset_name)
+    result = result.dropna().reset_index(drop=True).iloc[1:].reset_index(drop=True)
+    return dataset_name, result
 
 if __name__ == "__main__":
 
@@ -254,18 +278,48 @@ if __name__ == "__main__":
     chunk(df_train, df_val, df_test)
     label_slope(df_train, df_val, df_test)
     label_volatility(df_train, df_val, df_test)
-    logger.info(f"df_train")
-    df_train = label_whole(df_train).dropna().reset_index(drop=True).iloc[1:].reset_index(drop=True)
-    
-    logger.info(f"df_val")
-    df_val = label_whole(df_val).dropna().reset_index(drop=True).iloc[1:].reset_index(drop=True)
-    
-    logger.info(f"df_test")
-    df_test = label_whole(df_test).dropna().reset_index(drop=True).iloc[1:].reset_index(drop=True)
 
-    logger.info(f"label end")
+    # 使用多进程并行处理三个数据集
+    logger.info("=" * 50)
+    logger.info("开始并行处理数据集特征提取...")
+    logger.info(f"可用CPU核心数: {cpu_count()}")
+    logger.info("=" * 50)
+
+    # 准备数据集列表
+    datasets = [
+        (df_train.copy(), 'df_train'),
+        (df_val.copy(), 'df_val'),
+        (df_test.copy(), 'df_test')
+    ]
+
+    # 使用3个进程并行处理(每个数据集一个进程)
+    num_processes = min(3, cpu_count())
+    logger.info(f"使用 {num_processes} 个进程并行处理")
+
+    with Pool(processes=num_processes) as pool:
+        results = pool.map(process_single_dataset, datasets)
+
+    # 收集结果
+    result_dict = {name: df for name, df in results}
+    df_train = result_dict['df_train']
+    df_val = result_dict['df_val']
+    df_test = result_dict['df_test']
+
+    logger.info("=" * 50)
+    logger.info("所有数据集处理完成,开始保存文件...")
+    logger.info("=" * 50)
+
     df_train.to_feather('./data/ETHUSDT/whole/train.feather')
+    logger.info("df_train 已保存")
+
     df_val.to_feather('./data/ETHUSDT/whole/val.feather')
+    logger.info("df_val 已保存")
+
     df_test.to_feather('./data/ETHUSDT/whole/test.feather')
+    logger.info("df_test 已保存")
+
+    logger.info("=" * 50)
+    logger.info("全部流程完成!")
+    logger.info("=" * 50)
 
 
