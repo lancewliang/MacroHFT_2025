@@ -555,13 +555,20 @@ class Testing_Env(gym.Env):
         #     # 累计计算每个时间点的余额
         #     balance_list.append(np.sum(true_money[:i + 1]))
         # 计算最大资金需求（历史最低余额的绝对值） （风险度量指标）
-        required_money = 0
-        if len(balance_list) > 0: 
-            required_money = -np.min(balance_list)
+        required_money = 0.01  # 默认最小值，避免除零
+        if len(balance_list) > 0:
+            min_balance = np.min(balance_list)
+            # 修复bug：当最小值为正数时，required_money会变成负数
+            # 使用max确保required_money始终为正
+            required_money = max(0.01, -min_balance)
         # 计算总手续费（注意：字段名存在拼写错误 comission -> commission）
         commission_fee = np.sum(self.comission_fee_history)
         # 返回相对收益率、净收益、最大资金需求、总手续费
-        return final_balance / required_money, final_balance, required_money, commission_fee
+        # 确保required_money > 0以避免除零错误
+        if required_money > 0:
+            return final_balance / required_money, final_balance, required_money, commission_fee
+        else:
+            return 0.0, final_balance, 0.01, commission_fee
 
 q_table_dict = {}
 
