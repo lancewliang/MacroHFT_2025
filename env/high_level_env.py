@@ -157,7 +157,7 @@ class Testing_Env(gym.Env):
         self.trade_records = []  # 记录所有买卖记录
         self.trade_id_counter = 0  # 交易ID计数器
         # 资金记录         
-        self.initial_money = (self.data["open"].iloc[0] * self.max_holding_number * (n_action -1)) * 1.1
+        self.initial_money = (self.data["close"].iloc[0] * self.max_holding_number * (n_action -1)) * 1.1
         self.current_money = self.initial_money
         self.current_value = self.current_money
         self.value_history = []
@@ -198,7 +198,7 @@ class Testing_Env(gym.Env):
         self.trend_state = self.data[self.tech_indicator_list_trend].values # 趋势特征状态
         self.clf_state = self.data[self.clf_list].values  ##分类特征状态
         # 资金记录
-        self.initial_money = self.data["open"].iloc[0] * self.max_holding_number
+        self.initial_money = self.data["close"].iloc[0] * self.max_holding_number
         self.current_money = self.initial_money
         self.current_value = self.current_money
         self.value_history = []
@@ -588,9 +588,10 @@ class Testing_Env(gym.Env):
         balance_list = np.cumsum(true_money)
         
         # 计算最大资金需求（历史最低余额的绝对值） （风险度量指标） 
-        required_money = 0
+        required_money = self.initial_money
         if len(balance_list) > 0:
-            required_money = -np.min(balance_list)
+            min_balance = np.min(balance_list)
+            required_money = max(self.initial_money, -min_balance)
         # 计算总手续费（注意：字段名存在拼写错误 comission -> commission）
         commission_fee = np.sum(self.comission_fee_history)
         # 返回相对收益率、净收益、最大资金需求、总手续费

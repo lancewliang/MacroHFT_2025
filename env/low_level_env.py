@@ -139,7 +139,7 @@ class Testing_Env(gym.Env):
         self.step_times = 0
         self.trade_id_counter = 0  # 重置交易ID计数器
         self.trade_records = []  # 清空交易记录
-
+        self.initial_money = (self.data["close"].iloc[0] * self.max_holding_number * (2 -1)) * 1.1
 
     def calculate_value(self, price_information, position):
         """计算当前持仓价值"""
@@ -164,6 +164,7 @@ class Testing_Env(gym.Env):
         """
         # 重置终止标志
         self.terminal = False
+        
         # 重置时间步计数器到初始窗口长度
         self.m = back_time_length
         # 初始化市场数据窗口（从起始位置到当前步）
@@ -555,12 +556,12 @@ class Testing_Env(gym.Env):
         #     # 累计计算每个时间点的余额
         #     balance_list.append(np.sum(true_money[:i + 1]))
         # 计算最大资金需求（历史最低余额的绝对值） （风险度量指标）
-        required_money = 0.01  # 默认最小值，避免除零
+        required_money = self.initial_money # 默认最小值，避免除零
         if len(balance_list) > 0:
             min_balance = np.min(balance_list)
             # 修复bug：当最小值为正数时，required_money会变成负数
             # 使用max确保required_money始终为正
-            required_money = max(0.01, -min_balance)
+            required_money = max(self.initial_money, -min_balance)
         # 计算总手续费（注意：字段名存在拼写错误 comission -> commission）
         commission_fee = np.sum(self.comission_fee_history)
         # 返回相对收益率、净收益、最大资金需求、总手续费
