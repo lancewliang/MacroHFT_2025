@@ -163,7 +163,7 @@ class DQN_EVAL(object):
                  tech_indicator_list_trend,
                  transcation_cost,
                  back_time_length,
-                 max_holding_number,
+                 max_holding_number,subagent_hidden_size
                  ):  
         self.n_state_1= n_state_1
         self.n_state_2= n_state_2
@@ -178,6 +178,7 @@ class DQN_EVAL(object):
         self.back_time_length=back_time_length
         self.max_holding_number=max_holding_number
         self.action_mode = action_mode
+        self.subagent_hidden_size = subagent_hidden_size
     
 
     
@@ -276,7 +277,7 @@ class DQN_EVAL(object):
             (self.n_state_1, self.n_state_2, self.actions , self.action_mode, self.n_action, self.device,
              self.val_data_path, self.tech_indicator_list, self.tech_indicator_list_trend,
              self.transcation_cost, self.back_time_length, self.max_holding_number,
-             epoch_path, df_id, initial_action)
+             epoch_path, df_id, initial_action, self.subagent_hidden_size)
             for df_id in df_list
         ]
         
