@@ -87,7 +87,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=1300000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=2500000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=256)  # 批次大小 / Mini-batch size
@@ -111,6 +111,7 @@ parser.add_argument("--exp",type=str,default="exp4")
 parser.add_argument("--device",type=str,default="cuda:0")  # 计算设备 / Computation device
 parser.add_argument("--action_mode",type=str,default="both")  # 动作方向
 parser.add_argument("--action_size",type=int,default=2)  # 动作数量
+parser.add_argument("--subagent_hidden_size",type=int,default=128)  # 子智能体隐藏层大小 / Sub-agent hidden layer size
 parser.add_argument("--reward_no_action",type=str,default="False")  # 奖励没有动作
         
 def seed_torch(seed):
@@ -201,7 +202,8 @@ class DQN(object):
 
         self.tech_indicator_list = np.load('./data/feature_list/single_features.npy', allow_pickle=True).tolist()
         self.tech_indicator_list_trend = np.load('./data/feature_list/trend_features.npy', allow_pickle=True).tolist()
-
+        log.info(f"self.tech_indicator_list:{self.tech_indicator_list}")
+        log.info(f"self.tech_indicator_list_trend:{self.tech_indicator_list_trend}")
 
         self.action_mode = args.action_mode
         self.actions, self.n_action, self.action_type_desc = get_actions(self.action_mode, args.action_size)
@@ -211,15 +213,15 @@ class DQN(object):
         log.info(f"self.action_type_desc:{self.action_type_desc}")
 
 
-
+        self.subagent_hidden_size = args.subagent_hidden_size
         self.transcation_cost = args.transcation_cost
         self.back_time_length = args.back_time_length
         self.n_action = len(self.actions)
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
-        self.epsilon_net = subagent(self.n_state_1, self.n_state_2, self.n_action, 256).to(self.epsilon_device)
-        self.eval_net = subagent(self.n_state_1, self.n_state_2, self.n_action, 256).to(self.device)
-        self.target_net =subagent(self.n_state_1, self.n_state_2, self.n_action, 256).to(self.device)
+        self.epsilon_net = subagent(self.n_state_1, self.n_state_2, self.n_action, self.subagent_hidden_size).to(self.epsilon_device)
+        self.eval_net = subagent(self.n_state_1, self.n_state_2, self.n_action, self.subagent_hidden_size).to(self.device)
+        self.target_net =subagent(self.n_state_1, self.n_state_2, self.n_action, self.subagent_hidden_size).to(self.device)
         self.hardupdate()
         self.update_times = args.update_times
         self.optimizer = torch.optim.Adam(self.eval_net.parameters(), lr=args.lr)
@@ -682,7 +684,7 @@ class DQN(object):
                 self.tech_indicator_list_trend,
                 self.transcation_cost,
                 self.back_time_length,
-                self.max_holding_number)
+                self.max_holding_number,self.subagent_hidden_size)
             
             # 执行验证 / Perform validation
             return_rate = dqn_eval.val_cluster(epoch_path, val_path, int(0), var_df_list)

@@ -47,12 +47,12 @@ def _validate_worker(args):
     # 解包参数
     (n_state_1, n_state_2, actions, action_mode,n_action, device, val_data_path, 
      tech_indicator_list, tech_indicator_list_trend, transcation_cost,
-     back_time_length, max_holding_number, epoch_path, df_id, initial_action) = args
+     back_time_length, max_holding_number, epoch_path, df_id, initial_action, subagent_hidden_size) = args
     
     # 创建EVALER实例
     evaler = EVALER(n_state_1, n_state_2, actions, action_mode, n_action, device,
                    val_data_path, tech_indicator_list, tech_indicator_list_trend,
-                   transcation_cost, back_time_length, max_holding_number)
+                   transcation_cost, back_time_length, max_holding_number, subagent_hidden_size)
     
     # 执行验证并返回结果
     return evaler.val_cluster(epoch_path, df_id, initial_action)
@@ -65,10 +65,12 @@ class EVALER(object):
                  transcation_cost,
                  back_time_length,
                  max_holding_number,
+                 subagent_hidden_size=128
                  ):  
         self.device = torch.device(device) 
         self.val_data_path = val_data_path
-        self.eval_net = subagent(n_state_1, n_state_2, n_action, 256).to(self.device)
+        self.subagent_hidden_size = subagent_hidden_size
+        self.eval_net = subagent(n_state_1, n_state_2, n_action, subagent_hidden_size).to(self.device)
 
         self.tech_indicator_list=tech_indicator_list
         self.tech_indicator_list_trend=tech_indicator_list_trend
