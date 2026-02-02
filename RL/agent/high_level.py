@@ -93,7 +93,7 @@ parser.add_argument("--num_step",type=int,default=10)
 parser.add_argument("--action_mode",type=str,default="short")  # 动作方向
 parser.add_argument("--action_size",type=int,default=1)  # 动作数量
 parser.add_argument("--reward_no_action",type=bool,default=False)  # 奖励没有动作
-
+parser.add_argument("--subagent_hidden_size",type=int,default=128) 
 def seed_torch(seed):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -147,7 +147,7 @@ class DQN(object):
         else:
             raise Exception ("we do not support other dataset yet")
         self.epoch_number = args.epoch_number
-        
+        self.subagent_hidden_size = args.subagent_hidden_size
         self.log_path = os.path.join(self.model_path, "log")
         if not os.path.exists(self.log_path):
             os.makedirs(self.log_path)
@@ -175,7 +175,7 @@ class DQN(object):
         self.n_state_1 = len(self.tech_indicator_list)
         self.n_state_2 = len(self.tech_indicator_list_trend)
         
-        high_level_hidden_dim = 32*4
+        high_level_hidden_dim = self.subagent_hidden_size
         self.epsilon_hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.epsilon_device)
         self.hyperagent = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
         self.hyperagent_target = hyperagent(self.n_state_1, self.n_state_2, self.n_action, high_level_hidden_dim).to(self.device)
@@ -186,7 +186,7 @@ class DQN(object):
         log.debug(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
         
                        
-        low_level_hidden_dim = 64*4  #*8
+        low_level_hidden_dim = self.subagent_hidden_size*2  #*8
         self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
         self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
         self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
@@ -202,36 +202,36 @@ class DQN(object):
         if self.action_mode == "long":
              
             model_list_slope = [
-                "./result/low_level/ETHUSDT/long_action/slope/1/best_model.pkl", 
-                "./result/low_level/ETHUSDT/long_action/slope/2/best_model.pkl",
-                "./result/low_level/ETHUSDT/long_action/slope/3/best_model.pkl"
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/1/best_model.pkl", 
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/2/best_model.pkl",
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/3/best_model.pkl"
             ]
             model_list_vol = [
-                "./result/low_level/ETHUSDT/long_action/vol/1/best_model.pkl",
-                "./result/low_level/ETHUSDT/long_action/vol/2/best_model.pkl",
-                "./result/low_level/ETHUSDT/long_action/vol/3/best_model.pkl"
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/1/best_model.pkl",
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/2/best_model.pkl",
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/3/best_model.pkl"
             ]
         elif self.action_mode == "short":
             model_list_slope = [
-                "./result/low_level/ETHUSDT/short_action/best_model/slope/1/best_model.pkl", 
-                "./result/low_level/ETHUSDT/short_action/best_model/slope/2/best_model.pkl",
-                "./result/low_level/ETHUSDT/short_action/best_model/slope/3/best_model.pkl"
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/1/best_model.pkl", 
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/2/best_model.pkl",
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/3/best_model.pkl"
             ]
             model_list_vol = [
-                "./result/low_level/ETHUSDT/short_action/best_model/vol/1/best_model.pkl",
-                "./result/low_level/ETHUSDT/short_action/best_model/vol/2/best_model.pkl",
-                "./result/low_level/ETHUSDT/short_action/best_model/vol/3/best_model.pkl"
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/1/best_model.pkl",
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/2/best_model.pkl",
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/3/best_model.pkl"
             ]    
         elif self.action_mode == "both":
             model_list_slope = [
-                "./result/low_level/ETHUSDT/both_action/best_model/slope/1/best_model.pkl", 
-                "./result/low_level/ETHUSDT/both_action/best_model/slope/2/best_model.pkl",
-                "./result/low_level/ETHUSDT/both_action/best_model/slope/3/best_model.pkl"
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/1/best_model.pkl", 
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/2/best_model.pkl",
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/3/best_model.pkl"
             ]
             model_list_vol = [
-                "./result/low_level/ETHUSDT/both_action/best_model/vol/1/best_model.pkl",
-                "./result/low_level/ETHUSDT/both_action/best_model/vol/2/best_model.pkl",
-                "./result/low_level/ETHUSDT/both_action/best_model/vol/3/best_model.pkl"
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/1/best_model.pkl",
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/2/best_model.pkl",
+                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/3/best_model.pkl"
             ]
         log.info(f"self.model_list_slope:{model_list_slope}")
         log.info(f"self.model_list_vol:{model_list_vol}")
@@ -1137,21 +1137,21 @@ if __name__ == "__main__":
     agent = DQN(args)
     agent.train() 
  
-    num_processes = 3
-    args_list = [
+    # num_processes = 3
+    # args_list = [
             
-    ]
-    for i in range(args.epoch_number):
-        args_copy = copy.deepcopy(args)
-        args_copy.i = i+1
-        args_list.append(args_copy)
+    # ]
+    # for i in range(args.epoch_number):
+    #     args_copy = copy.deepcopy(args)
+    #     args_copy.i = i+1
+    #     args_list.append(args_copy)
     
-    with multiprocessing.Pool(processes=num_processes) as pool:
+    # with multiprocessing.Pool(processes=num_processes) as pool:
          
-            results = pool.imap_unordered(_validate_test_worker, args_list)
-            for result in results:
-                print(result)
-                pass
+    #         results = pool.imap_unordered(_validate_test_worker, args_list)
+    #         for result in results:
+    #             print(result)
+    #             pass
             
     
          
