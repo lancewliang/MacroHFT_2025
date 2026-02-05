@@ -186,7 +186,7 @@ class DQN(object):
         log.debug(f"self.epsilon_hyperagent:{self.epsilon_hyperagent.state_dict()}")
         
                        
-        low_level_hidden_dim = self.subagent_hidden_size*2  #*8
+        low_level_hidden_dim = self.subagent_hidden_size  #*8
         self.slope_1 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
         self.slope_2 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
         self.slope_3 = subagent(self.n_state_1, self.n_state_2, self.n_action, low_level_hidden_dim).to(self.epsilon_device)
@@ -294,7 +294,7 @@ class DQN(object):
         self.decay_length = args.decay_length
         self.epsilon_scheduler = LinearDecaySchedule(start_epsilon=self.epsilon_start, end_epsilon=self.epsilon_end, decay_length=self.decay_length)
         self.epsilon = args.epsilon_start
-        episodicmemory_dim = 64*4
+        episodicmemory_dim = high_level_hidden_dim*2
         self.memory = episodicmemory(4320, 10, self.n_state_1, self.n_state_2, episodicmemory_dim, self.device)
         self.no_risk_return = args.no_risk_return
         self.best_return_rate = -float('inf')    # 最佳收益率记录 / Best return rate record 
@@ -973,8 +973,10 @@ class HIGH_LEVEL_DQN_EVAL(DQN):
  
 class HIGH_LEVEL_DQN_TEST(DQN):
     def __init__(self, args):  # 定义DQN的一系列属性
+        val_args = copy.deepcopy(args) 
+        val_args.device = "cpu"
         super(HIGH_LEVEL_DQN_TEST,
-              self).__init__(args)
+              self).__init__(val_args)
         
     def act_test(self, state, state_trend, state_clf, info):
         """
