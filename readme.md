@@ -42,9 +42,15 @@ stage 2
 - Incorporate spot prices into the factor,
 - Train Data by 2022-2025
 
+```
+已经完成 验证集 2025-02-01 到 2025-05-31
+做空利润在验证集获得100%。 模型泛化有效
+做多依然无效。和训练数据集有关系，还需要继续测试
+```
+
 stage 3
 
-- backtest with fredtrade
+- backtest with hftbacktest
 
 stage 4
 - More sub-agents pre volume
