@@ -50,10 +50,16 @@ stage 2
 ```
 
 stage 3
-
-- backtest with hftbacktest
+- backtest with pyhftbacktest
 
 stage 4
+- dry-run with hftbacktest-rust with binance 
+
+stage 5 
+- real-run with hftbacktest-rust with binance 
+
+
+more research about model
 - More sub-agents pre volume
 - Use LSTM or Transformer to observe the effect at the model level 
 - Attempt to investigate the impact of ranbowdqn on the model
