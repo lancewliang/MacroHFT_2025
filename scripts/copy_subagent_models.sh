@@ -6,7 +6,7 @@
 #        <vol1_epoch>   <vol2_epoch>   <vol3_epoch>
 #
 # Example:
-#   ./scripts/copy_subagent_models.sh MRMB short short_action_2_1m 1 12 10 2 11 12 11
+#   ./scripts/copy_subagent_models.sh MRMB short short_action_5_1m 1 12 10 2 11 12 11
 
 set -e
 
@@ -48,6 +48,8 @@ copy_model() {
     fi
 
     mkdir -p "${DST_DIR}"
+    rm -rf "${DST}"
+    echo "[OK] rm -rf ${DST}"
     cp "${SRC}" "${DST}"
     echo "[OK] ${SRC} -> ${DST}"
 }

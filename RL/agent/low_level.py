@@ -87,7 +87,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["F_ENABLE_ONEDNN_OPTS"] = "0"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--buffer_size",type=int,default=2500000)  # 经验缓冲区大小 / Replay buffer capacity
+parser.add_argument("--buffer_size",type=int,default=1200000)  # 经验缓冲区大小 / Replay buffer capacity
 parser.add_argument("--dataset",type=str,default="ETHUSDT")  # 数据集名称 / Dataset name
 parser.add_argument("--q_value_memorize_freq",type=int, default=20)  # Q值记忆频率 / Q-value logging frequency
 parser.add_argument("--batch_size",type=int,default=256)  # 批次大小 / Mini-batch size
@@ -186,6 +186,8 @@ class DQN(object):
             self.max_holding_number=10
         elif "LTC" in self.dataset:
             self.max_holding_number=10
+        elif "MRMB" in self.dataset:
+            self.max_holding_number=1
         else:
             raise Exception ("we do not support other dataset yet")
         self.epoch_number = args.epoch_number
@@ -620,10 +622,16 @@ class DQN(object):
             log.info(f"start val epoch {epoch_counter}")
              
             validation_task = (epoch_counter, epoch_path, val_path)
+            self.validation_done_event.clear()  # 重置事件，准备等待本次验证完成
             self.validation_queue.put(validation_task, timeout=5.0)
             log.info(f"验证任务已加入队列: epoch {epoch_counter}")
+            log.info(f"等待验证完成: epoch {epoch_counter}")
+            self.validation_done_event.wait()  # 阻塞，直到验证线程完成本次验证
+            log.info(f"验证已完成，继续下一轮训练: epoch {epoch_counter}")
             
     def _start_validation_consumer(self):
+        self.validation_done_event = threading.Event()
+
         def validation_consumer():
             log.info("验证消费者线程启动")
             while True:
@@ -632,21 +640,23 @@ class DQN(object):
                     validation_task = self.validation_queue.get_nowait()
                     if validation_task is None:  # 停止信号
                         break
-                    
+
                     epoch_counter, epoch_path, val_path = validation_task
                     log.info(f"验证消费者处理任务: epoch {epoch_counter}")
                     var_df_list = self.val_index[self.label]
                     self._async_validate_and_save(epoch_counter, epoch_path, val_path, var_df_list)
                 except queue.Empty:
-                    time.sleep(60)
+                    time.sleep(1)
                     continue  # 队列为空，继续等待
                 except Exception as e:
                     log.error(f"验证消费者线程异常: {e}")
-                    continue
-            
+                finally:
+                    # 无论成功或异常，通知训练主线程验证已完成
+                    self.validation_done_event.set()
+
             log.info("验证消费者线程停止")
-        
-        # 启动验证消费者线程 
+
+        # 启动验证消费者线程
         self.validation_thread = threading.Thread(target=validation_consumer, daemon=True)
         self.validation_thread.start()
         log.info("验证消费者线程已启动")

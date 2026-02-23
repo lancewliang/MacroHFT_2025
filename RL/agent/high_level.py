@@ -144,6 +144,8 @@ class DQN(object):
             self.max_holding_number=10
         elif "LTC" in self.dataset:
             self.max_holding_number=10
+        elif "MRMB" in self.dataset:
+            self.max_holding_number=1
         else:
             raise Exception ("we do not support other dataset yet")
         self.epoch_number = args.epoch_number
@@ -202,36 +204,36 @@ class DQN(object):
         if self.action_mode == "long":
              
             model_list_slope = [
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/1/best_model.pkl", 
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/2/best_model.pkl",
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/3/best_model.pkl"
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/slope/1/best_model.pkl", 
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/slope/2/best_model.pkl",
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/slope/3/best_model.pkl"
             ]
             model_list_vol = [
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/1/best_model.pkl",
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/2/best_model.pkl",
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/3/best_model.pkl"
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/vol/1/best_model.pkl",
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/vol/2/best_model.pkl",
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/vol/3/best_model.pkl"
             ]
         elif self.action_mode == "short":
             model_list_slope = [
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/1/best_model.pkl", 
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/2/best_model.pkl",
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/3/best_model.pkl"
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/slope/1/best_model.pkl", 
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/slope/2/best_model.pkl",
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/slope/3/best_model.pkl"
             ]
             model_list_vol = [
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/1/best_model.pkl",
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/2/best_model.pkl",
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/3/best_model.pkl"
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/vol/1/best_model.pkl",
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/vol/2/best_model.pkl",
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/vol/3/best_model.pkl"
             ]    
         elif self.action_mode == "both":
             model_list_slope = [
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/1/best_model.pkl", 
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/2/best_model.pkl",
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/slope/3/best_model.pkl"
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/slope/1/best_model.pkl", 
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/slope/2/best_model.pkl",
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/slope/3/best_model.pkl"
             ]
             model_list_vol = [
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/1/best_model.pkl",
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/2/best_model.pkl",
-                f"./result/low_level/ETHUSDT/{self.action_mode}/{self.exp}/best_model/vol/3/best_model.pkl"
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/vol/1/best_model.pkl",
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/vol/2/best_model.pkl",
+                f"./result/low_level/{self.dataset}/{self.action_mode}/{self.exp}/best_model/vol/3/best_model.pkl"
             ]
         log.info(f"self.model_list_slope:{model_list_slope}")
         log.info(f"self.model_list_vol:{model_list_vol}")
@@ -1139,21 +1141,21 @@ if __name__ == "__main__":
     agent = DQN(args)
     agent.train() 
  
-    # num_processes = 3
-    # args_list = [
+    num_processes = 3
+    args_list = [
             
-    # ]
-    # for i in range(args.epoch_number):
-    #     args_copy = copy.deepcopy(args)
-    #     args_copy.i = i+1
-    #     args_list.append(args_copy)
+    ]
+    for i in range(args.epoch_number):
+        args_copy = copy.deepcopy(args)
+        args_copy.i = i+1
+        args_list.append(args_copy)
     
-    # with multiprocessing.Pool(processes=num_processes) as pool:
+    with multiprocessing.Pool(processes=num_processes) as pool:
          
-    #         results = pool.imap_unordered(_validate_test_worker, args_list)
-    #         for result in results:
-    #             print(result)
-    #             pass
+            results = pool.imap_unordered(_validate_test_worker, args_list)
+            for result in results:
+                print(result)
+                pass
             
     
          

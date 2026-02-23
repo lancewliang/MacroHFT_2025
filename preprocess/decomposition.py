@@ -41,19 +41,19 @@ def chunk(df_train, df_val, df_test):
         start = i * chunk_size
         end = (i + 1) * chunk_size
         df_chunk = df_train[start:end].reset_index(drop=True)
-        df_chunk.to_feather('./data/ETHUSDT/train/df_{}.feather'.format(i))
+        df_chunk.to_feather('./data/MRMB/train/df_{}.feather'.format(i))
 
     for i in range(int(len(df_val) / chunk_size)):
         start = i * chunk_size
         end = (i + 1) * chunk_size
         df_chunk = df_val[start:end].reset_index(drop=True)
-        df_chunk.to_feather('./data/ETHUSDT/val/df_{}.feather'.format(i))
+        df_chunk.to_feather('./data/MRMB/val/df_{}.feather'.format(i))
 
     for i in range(int(len(df_test) / chunk_size)):
         start = i * chunk_size
         end = (i + 1) * chunk_size
         df_chunk = df_test[start:end].reset_index(drop=True)
-        df_chunk.to_feather('./data/ETHUSDT/test/df_{}.feather'.format(i))
+        df_chunk.to_feather('./data/MRMB/test/df_{}.feather'.format(i))
 
 def label_slope(df_train, df_val, df_test):
     """
@@ -109,7 +109,7 @@ def label_slope(df_train, df_val, df_test):
     # 保存训练集标签
     for index, label in enumerate(slope_labels_train):
         train_indices[label].append(index)
-    with open('./data/ETHUSDT/train/slope_labels.pkl', 'wb') as file:
+    with open('./data/MRMB/train/slope_labels.pkl', 'wb') as file:
         pickle.dump(train_indices, file)
 
     # 调整边界值防止溢出
@@ -129,11 +129,11 @@ def label_slope(df_train, df_val, df_test):
     # 保存验证集和测试集标签
     for index, label in enumerate(slope_labels_val):
         val_indices[label].append(index)
-    with open('./data/ETHUSDT/val/slope_labels.pkl', 'wb') as file:
+    with open('./data/MRMB/val/slope_labels.pkl', 'wb') as file:
         pickle.dump(val_indices, file)
     for index, label in enumerate(slope_labels_test):
         test_indices[label].append(index)
-    with open('./data/ETHUSDT/test/slope_labels.pkl', 'wb') as file:
+    with open('./data/MRMB/test/slope_labels.pkl', 'wb') as file:
         pickle.dump(test_indices, file)
 
 def label_volatility(df_train, df_val, df_test):
@@ -189,7 +189,7 @@ def label_volatility(df_train, df_val, df_test):
     # 保存训练集标签
     for index, label in enumerate(vol_labels_train):
         train_indices[label].append(index)
-    with open('./data/ETHUSDT/train/vol_labels.pkl', 'wb') as file:
+    with open('./data/MRMB/train/vol_labels.pkl', 'wb') as file:
         pickle.dump(train_indices, file)
 
     # 调整边界值并处理极端类别
@@ -208,11 +208,11 @@ def label_volatility(df_train, df_val, df_test):
     # 保存验证集和测试集标签
     for index, label in enumerate(vol_labels_val):
         val_indices[label].append(index)
-    with open('./data/ETHUSDT/val/vol_labels.pkl', 'wb') as file:
+    with open('./data/MRMB/val/vol_labels.pkl', 'wb') as file:
         pickle.dump(val_indices, file)
     for index, label in enumerate(vol_labels_test):
         test_indices[label].append(index)
-    with open('./data/ETHUSDT/test/vol_labels.pkl', 'wb') as file:
+    with open('./data/MRMB/test/vol_labels.pkl', 'wb') as file:
         pickle.dump(test_indices, file)
 
 
@@ -263,17 +263,17 @@ def process_single_dataset(args):
 if __name__ == "__main__":
 
     # 加载数据 -> 创建目录 -> 分块存储 -> 生成标签 -> 添加特征 -> 保存结果
-    df_train = pd.read_feather('./data/ETHUSDT/df_train.feather')
-    df_val = pd.read_feather('./data/ETHUSDT/df_val.feather')
-    df_test = pd.read_feather('./data/ETHUSDT/df_test.feather')
+    df_train = pd.read_feather('./data/MRMB/df_train.feather')
+    df_val = pd.read_feather('./data/MRMB/df_val.feather')
+    df_test = pd.read_feather('./data/MRMB/df_test.feather')
     logger.info(f"data shape: {df_train.shape}")
     logger.info(f"columns: {df_train.columns.tolist()}")
     logger.info(f"head:\n{df_train.head()}")
     logger.info(f"tail:\n{df_train.tail()}")
-    os.makedirs('./data/ETHUSDT/train', exist_ok=True)
-    os.makedirs('./data/ETHUSDT/val', exist_ok=True)
-    os.makedirs('./data/ETHUSDT/test', exist_ok=True)
-    os.makedirs('./data/ETHUSDT/whole', exist_ok=True)
+    os.makedirs('./data/MRMB/train', exist_ok=True)
+    os.makedirs('./data/MRMB/val', exist_ok=True)
+    os.makedirs('./data/MRMB/test', exist_ok=True)
+    os.makedirs('./data/MRMB/whole', exist_ok=True)
 
     chunk(df_train, df_val, df_test)
     label_slope(df_train, df_val, df_test)
@@ -309,13 +309,13 @@ if __name__ == "__main__":
     logger.info("所有数据集处理完成,开始保存文件...")
     logger.info("=" * 50)
 
-    df_train.to_feather('./data/ETHUSDT/whole/train.feather')
+    df_train.to_feather('./data/MRMB/whole/train.feather')
     logger.info("df_train 已保存")
 
-    df_val.to_feather('./data/ETHUSDT/whole/val.feather')
+    df_val.to_feather('./data/MRMB/whole/val.feather')
     logger.info("df_val 已保存")
 
-    df_test.to_feather('./data/ETHUSDT/whole/test.feather')
+    df_test.to_feather('./data/MRMB/whole/test.feather')
     logger.info("df_test 已保存")
 
     logger.info("=" * 50)
