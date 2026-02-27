@@ -7,3 +7,5 @@ nohup python -u RL/agent/low_level.py --buffer_size 500000 --dataset 'MRMB' --lr
 nohup python -u RL/agent/low_level.py --buffer_size 500000 --dataset 'MRMB' --lr 0.00005 --alpha 1 --subagent_hidden_size=64 --exp 'short_action_2_1m' --clf 'slope' --device 'cuda:0' --transcation_cost 0.0002 --action_mode short --action_size 1 --label label_1 --reward_no_action False >./logs/low_level/MRMB/slope_1_short_action_2_1m.log 2>&1 &
 nohup python -u RL/agent/low_level.py --buffer_size 500000 --dataset 'MRMB' --lr 0.00005 --alpha 1 --subagent_hidden_size=64 --exp 'short_action_2_1m' --clf 'slope' --device 'cuda:0' --transcation_cost 0.0002 --action_mode short --action_size 1 --label label_3 --reward_no_action False >./logs/low_level/MRMB/slope_3_short_action_2_1m.log 2>&1 &
 
+
+ 

@@ -1,0 +1,2 @@
+nohup python -u RL/agent/high_level.py --lr 0.0001 --subagent_hidden_size=128 --buffer_size 700000 --exp 'long_action_5_30s' --dataset 'MRMB' --transcation_cost 0.0005 --action_mode long --action_size 1 --reward_no_action False >./logs/high_level/MRMB/long_action_5_30s.log 2>&1 &
+ 
