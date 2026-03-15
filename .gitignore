@@ -1,5 +1,8 @@
-data/ETHUSDT
+data
+data_mrmb_30s
+data_mrmb_1m
 data_org
+data_eth_2024
 logs/
 **/__pycache__/
 result/high_level
