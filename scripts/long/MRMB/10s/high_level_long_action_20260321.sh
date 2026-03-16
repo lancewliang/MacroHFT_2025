@@ -1,0 +1,4 @@
+nohup python -u RL/agent/high_level.py --beta 2 --alpha 1 --lr 0.0001 --subagent_hidden_size=512 --buffer_size 2200000 --exp 'long_action_5_10s' --dataset 'MRMB' --transcation_cost 0.0005 --action_mode long --action_size 1 --reward_no_action False >./logs/high_level/MRMB/long_action_5_10s.log 2>&1 &
+ 
+nohup python -u RL/agent/high_level.py --beta 2 --alpha 1 --lr 0.0001 --subagent_hidden_size=512 --buffer_size 2200000 --exp 'long_action_2_10s' --dataset 'MRMB' --transcation_cost 0.0005 --action_mode long --action_size 1 --reward_no_action False >./logs/high_level/MRMB/long_action_2_10s.log 2>&1 &
+ 

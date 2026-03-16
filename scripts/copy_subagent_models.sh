@@ -13,6 +13,7 @@
 #   ./scripts/copy_subagent_models.sh MRMB short short_action_5_30s 1 13 14 13 14 14 14  slope1=13,slope2=14,slope3=13,vol1=14,vol2=14,vol3=14
 #   ./scripts/copy_subagent_models.sh MRMB both both_action_2_30s 1 14 11 9 12 11 10     slope1=14,slope2=11,slope3=9,vol1=12,vol2=11,vol3=10
 #   ./scripts/copy_subagent_models.sh MRMB both both_action_5_30s 1 11 10 9 12 13 10     slope1=11,slope2=10,slope3=9,vol1=12,vol2=13,vol3=10
+#   ./scripts/copy_subagent_models.sh MRMB short short_action_2_10s 1 11 10 13 13 12 12     slope1=11,slope2=10,slope3=13,vol1=13,vol2=12,vol3=12
 
 
 
